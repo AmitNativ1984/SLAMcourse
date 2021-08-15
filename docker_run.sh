@@ -8,7 +8,7 @@ echo "----------------------------------"
 DOCKER_ROOT="/home"
 DEV_VOLUME="/home/$USER/Dev:$DOCKER_ROOT/Dev"
 
-CONTAINER_IMAGE="amitnativ/slam:updated-opencv"
+CONTAINER_IMAGE="amitnativ/slam:opencv-matplotlib"
 
 # running docker
 xhost +
