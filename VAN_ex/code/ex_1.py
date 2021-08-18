@@ -30,21 +30,47 @@ def vertical_match_diff(kpts1, kpts2, matches):
 
     return deviations
 
+def get_matcherScore_inliers_outliers(matches, thres):
+    matches_inliers = []
+    matches_outliers =[]
+    
+    kpts1_inliers = []
+    kpts1_outliers = []
+    kpts2_inliers = []
+    kpts2_outliers = []
+    for ind, match in enumerate(matches):
+        if match.distance <= thres:
+            matches_inliers.append(match)
+            kpts1_inliers.append(kpts1[match.queryIdx])
+            kpts2_inliers.append(kpts2[match.trainIdx])
+        else:
+            matches_outliers.append(match)
+            kpts1_outliers.append(kpts1[match.queryIdx])
+            kpts2_outliers.append(kpts2[match.trainIdx])
+        
+    return matches_inliers, matches_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers,
+
+
 def get_rectified_inliers_outliers(kpts1, kpts2, matches, thres):
-    kpts1_in = []
-    kpts1_out = []
-    kpts2_in = []
-    kpts2_out = []
+    match_inliers = []
+    match_outliers = []
+    kpts1_inliers = []
+    kpts1_outliers = []
+    kpts2_inliers = []
+    kpts2_outliers = []
     for ind, match in enumerate(matches):
         ver_diff = np.abs(kpts1[match.queryIdx].pt[1] - kpts2[match.trainIdx].pt[1])
         if ver_diff <= thres:
-            kpts1_in.append(kpts1[match.queryIdx])
-            kpts2_in.append(kpts2[match.queryIdx])
+            match_inliers.append(match)
+            kpts1_inliers.append(kpts1[match.queryIdx])
+            kpts2_inliers.append(kpts2[match.queryIdx])
         else:
-            kpts1_out.append(kpts1[match.queryIdx])
-            kpts2_out.append(kpts2[match.queryIdx])
+            match_outliers.append(match)
+            kpts1_outliers.append(kpts1[match.queryIdx])
+            kpts2_outliers.append(kpts2[match.queryIdx])
 
-    return kpts1_in, kpts1_out, kpts2_in, kpts2_out
+    return match_inliers, match_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers
+
 def plot_histogram(x):
     counts, bins = np.histogram(x, bins=list(range(0, 100, 1)))
     counts = counts.astype(np.float)
@@ -78,6 +104,8 @@ if __name__ == "__main__":
     matches = bf.match(desc1,desc2)
 
     # sort matches in descending order
+    print("\nmatching based on feature BFmatcher distance")
+    print("=================================================================")
     matches = sorted(matches, key = lambda x:x.distance)
 
     # display first 20 points
@@ -96,30 +124,47 @@ if __name__ == "__main__":
     match_dist = []
     for m in matches:
         match_dist.append(m.distance)
-
+        
     counts, bins = plot_histogram(match_dist)
     cumsum_counts = np.cumsum(counts)
     thres = np.argmax(cumsum_counts>cumsumThres)
     max_match_diff = bins[thres]
-    # rejecting 1- cumsumThres of matches with larges distance
-    matches = [matches[i] for i, dist in enumerate(match_dist) if dist < max_match_diff]
-    
+
+    matches_inliers, matches_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers = get_matcherScore_inliers_outliers(matches, thres)
+    print("matcher threshold = {}".format(max_match_diff))
+    print("num of inliers: {}, num of outliers: {}".format(len(kpts1_inliers), len(kpts1_outliers)))
+
     # creating vertical distance distance for good matches
+    print("\ncalculating using vertical 2 px distance if rectified image pair")
+    print("=================================================================")
     deviations = vertical_match_diff(kpts1, kpts2, matches)
     counts, bins = plot_histogram(deviations)
 
     # rejecting outliers that exceed 2 pixels difference:
-    kpts1_in, kpts1_out, kpts2_in, kpts2_out = get_rectified_inliers_outliers(kpts1, kpts2, matches, thres=2)
+    match_inliers_rect, match_outliers_rect, kpts1_inliers_rect, kpts1_outliers_rect, kpts2_inliers_rect, kpts2_outliers_rect = get_rectified_inliers_outliers(kpts1, kpts2, matches, thres=2)
 
     img1bgr = np.dstack((img1, img1, img1))
     img2bgr = np.dstack((img2, img2, img2))
-    cv2.drawKeypoints(img1bgr, kpts1_in, img1bgr, color=(0,125,255))
-    cv2.drawKeypoints(img2bgr, kpts2_in, img2bgr, color=(0,125,255))
+    cv2.drawKeypoints(img1bgr, kpts1_inliers_rect, img1bgr, color=(0,125,255))
+    cv2.drawKeypoints(img2bgr, kpts2_inliers_rect, img2bgr, color=(0,125,255))
 
-    cv2.drawKeypoints(img1bgr, kpts1_out, img1bgr, color=(255,125,0))
-    cv2.drawKeypoints(img2bgr, kpts2_out, img2bgr, color=(255,125,0))
+    cv2.drawKeypoints(img1bgr, kpts1_outliers_rect, img1bgr, color=(255,125,0))
+    cv2.drawKeypoints(img2bgr, kpts2_outliers_rect, img2bgr, color=(255,125,0))
 
     cv2.imshow("Inliers/Outliers", np.hstack((img1bgr, img2bgr)))
+
+    print("num of inliers: {}, num of outliers: {}".format(len(kpts1_inliers_rect), len(kpts1_outliers_rect)))
+    print("\n")
+
+    # calucating number of matches that maintains vertical distance,
+    # but matcher distance is too large:
+    count = 0
+    for match in match_inliers_rect:
+        if match.distance > max_match_diff:
+            count += 1
+    
+    print("number of inliers with matcher score > {}: {}".format(max_match_diff, count))
+    print("P(good vertical distance | bad matcher score) = {:.2f}%".format (count / len(match_inliers_rect) * 100))
 
     # draw image
     cv2.imshow
