@@ -21,14 +21,30 @@ def detect_keyPts(img):
     keypts, descriptors = orb.detectAndCompute(img, None)
     return keypts, descriptors
 
-def vertical_match_diff(matches):
+def vertical_match_diff(kpts1, kpts2, matches):
     deviations = []
+
     for ind, match in enumerate(matches):
         ver_diff = np.abs(kpts1[match.queryIdx].pt[1] - kpts2[match.trainIdx].pt[1])
         deviations.append(ver_diff)
 
     return deviations
 
+def get_rectified_inliers_outliers(kpts1, kpts2, matches, thres):
+    kpts1_in = []
+    kpts1_out = []
+    kpts2_in = []
+    kpts2_out = []
+    for ind, match in enumerate(matches):
+        ver_diff = np.abs(kpts1[match.queryIdx].pt[1] - kpts2[match.trainIdx].pt[1])
+        if ver_diff <= thres:
+            kpts1_in.append(kpts1[match.queryIdx])
+            kpts2_in.append(kpts2[match.queryIdx])
+        else:
+            kpts1_out.append(kpts1[match.queryIdx])
+            kpts2_out.append(kpts2[match.queryIdx])
+
+    return kpts1_in, kpts1_out, kpts2_in, kpts2_out
 def plot_histogram(x):
     counts, bins = np.histogram(x, bins=list(range(0, 100, 1)))
     counts = counts.astype(np.float)
@@ -69,7 +85,7 @@ if __name__ == "__main__":
     cv2.imshow("Matches", imgMatches)
     
     # since images are rectified, examining the vertical distance between matches
-    deviations = vertical_match_diff(matches)
+    deviations = vertical_match_diff(kpts1, kpts2, matches)
     counts, bins = plot_histogram(deviations)
 
     dev_percent = sum([counts[i] for i, bin in enumerate(bins[:-1]) if bin > 2])
@@ -89,6 +105,22 @@ if __name__ == "__main__":
     matches = [matches[i] for i, dist in enumerate(match_dist) if dist < max_match_diff]
     
     # creating vertical distance distance for good matches
-    deviations = vertical_match_diff(matches)
+    deviations = vertical_match_diff(kpts1, kpts2, matches)
     counts, bins = plot_histogram(deviations)
-    plt.show()
+
+    # rejecting outliers that exceed 2 pixels difference:
+    kpts1_in, kpts1_out, kpts2_in, kpts2_out = get_rectified_inliers_outliers(kpts1, kpts2, matches, thres=2)
+
+    img1bgr = np.dstack((img1, img1, img1))
+    img2bgr = np.dstack((img2, img2, img2))
+    cv2.drawKeypoints(img1bgr, kpts1_in, img1bgr, color=(0,125,255))
+    cv2.drawKeypoints(img2bgr, kpts2_in, img2bgr, color=(0,125,255))
+
+    cv2.drawKeypoints(img1bgr, kpts1_out, img1bgr, color=(255,125,0))
+    cv2.drawKeypoints(img2bgr, kpts2_out, img2bgr, color=(255,125,0))
+
+    cv2.imshow("Inliers/Outliers", np.hstack((img1bgr, img2bgr)))
+
+    # draw image
+    cv2.imshow
+    cv2.waitKey(0)
