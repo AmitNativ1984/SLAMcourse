@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from tabulate import tabulate
 import matplotlib.pyplot as plt
-
+from utils import read_cameras, traingulate_point
 
 
 
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     print("matched perctenage that deviate from more than 2 pixels: {:.2f}%".format(dev_percent * 100))
 
     # rejecting matches based on matcher distance (taking 88% of matches)
-    cumsumThres = 0.88
+    cumsumThres = 0.4
     match_dist = []
     for m in matches:
         match_dist.append(m.distance)
@@ -162,10 +162,66 @@ if __name__ == "__main__":
     for match in match_inliers_rect:
         if match.distance > max_match_diff:
             count += 1
+        
     
     print("number of inliers with matcher score > {}: {}".format(max_match_diff, count))
     print("P(good vertical distance | bad matcher score) = {:.2f}%".format (count / len(match_inliers_rect) * 100))
 
+    
+    #(1.7)
+    #------
+    # read matrices
+    K, M1, M2 = read_cameras(DATA_PATH)
+
+    # solving linear list squares with SVD to calculate detected points in world coordiantes
+    P = K @ M1
+    Q = K @ M2
+    
+    # traingulating points:
+    X = []
+    
+    for match in match_inliers_rect:
+        p = np.array([kpts1[match.queryIdx].pt[0],
+                      kpts1[match.queryIdx].pt[1],
+                      1])
+        
+        q = np.array([kpts2[match.trainIdx].pt[0],
+                      kpts2[match.trainIdx].pt[1],
+                      1])
+
+        x = traingulate_point(P, Q, p, q)
+        X.append(x)
+
+    X = np.array(X)
+
+    
+    fig2 = plt.figure(2)
+    ax = fig2.add_subplot(projection='3d')
+    ax.scatter(X[:, 0], X[:, 1], X[:, 2], alpha=0.5, facecolors="None", color='blue')
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    ax.set_zlabel('Z [m]')
+
+
+    # comparing with opencv function:
+    Xcv = []
+    for match in match_inliers_rect:
+        p = np.array([kpts1[match.queryIdx].pt[0],
+                      kpts1[match.queryIdx].pt[1],
+                      1])
+        
+        q = np.array([kpts2[match.trainIdx].pt[0],
+                      kpts2[match.trainIdx].pt[1],
+                      1])
+
+        x = cv2.triangulatePoints(P, Q, kpts1[match.queryIdx].pt, kpts2[match.trainIdx].pt)
+        Xcv.append(x/ x[-1])
+
+    Xcv = np.array(Xcv).squeeze(-1)
+    ax.scatter(Xcv[:, 0], Xcv[:, 1], Xcv[:, 2], marker='^', color='red', alpha=0.5, facecolors="None")
+        
+
     # draw image
     cv2.imshow
+    plt.show()
     cv2.waitKey(0)
