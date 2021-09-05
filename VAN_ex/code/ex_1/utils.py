@@ -1,4 +1,17 @@
 import numpy as np
+import cv2
+
+
+def read_images(idx, DATA_PATH):
+    img_name = '{:06d}.png'.format(idx)
+    img1 = cv2.imread(DATA_PATH + "image_0/" + img_name, 0)
+    img2 = cv2.imread(DATA_PATH + "image_1/" + img_name, 0)
+    return img1, img2
+
+def detect_keyPts(img):
+    orb = cv2.ORB_create(nfeatures=1000)
+    keypts, descriptors = orb.detectAndCompute(img, None)
+    return keypts, descriptors
 
 def read_cameras(datapath):
     with open(datapath + 'calib.txt') as f:
@@ -44,7 +57,55 @@ def traingulate_point(P, Q, p, q):
     X = X/ X[-1]
     return X
 
+def vertical_match_diff(kpts1, kpts2, matches):
+    deviations = []
 
+    for ind, match in enumerate(matches):
+        ver_diff = np.abs(kpts1[match.queryIdx].pt[1] - kpts2[match.trainIdx].pt[1])
+        deviations.append(ver_diff)
+
+    return deviations
+
+def get_matcherScore_inliers_outliers(matches, thres):
+    matches_inliers = []
+    matches_outliers =[]
+    
+    kpts1_inliers = []
+    kpts1_outliers = []
+    kpts2_inliers = []
+    kpts2_outliers = []
+    for ind, match in enumerate(matches):
+        if match.distance <= thres:
+            matches_inliers.append(match)
+            kpts1_inliers.append(kpts1[match.queryIdx])
+            kpts2_inliers.append(kpts2[match.trainIdx])
+        else:
+            matches_outliers.append(match)
+            kpts1_outliers.append(kpts1[match.queryIdx])
+            kpts2_outliers.append(kpts2[match.trainIdx])
+        
+    return matches_inliers, matches_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers,
+
+
+def get_rectified_inliers_outliers(kpts1, kpts2, matches, thres):
+    match_inliers = []
+    match_outliers = []
+    kpts1_inliers = []
+    kpts1_outliers = []
+    kpts2_inliers = []
+    kpts2_outliers = []
+    for ind, match in enumerate(matches):
+        ver_diff = np.abs(kpts1[match.queryIdx].pt[1] - kpts2[match.trainIdx].pt[1])
+        if ver_diff <= thres:
+            match_inliers.append(match)
+            kpts1_inliers.append(kpts1[match.queryIdx])
+            kpts2_inliers.append(kpts2[match.queryIdx])
+        else:
+            match_outliers.append(match)
+            kpts1_outliers.append(kpts1[match.queryIdx])
+            kpts2_outliers.append(kpts2[match.queryIdx])
+
+    return match_inliers, match_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers
     
 
 if __name__ == "__main__":
