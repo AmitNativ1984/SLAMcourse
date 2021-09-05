@@ -66,7 +66,7 @@ def vertical_match_diff(kpts1, kpts2, matches):
 
     return deviations
 
-def get_matcherScore_inliers_outliers(matches, thres):
+def get_matcherScore_inliers_outliers(matches, thres, kpts1, kpts2):
     matches_inliers = []
     matches_outliers =[]
     

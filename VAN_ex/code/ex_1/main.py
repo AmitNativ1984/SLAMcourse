@@ -1,8 +1,10 @@
 import cv2
+import os
+print(os.getcwd())
 import numpy as np
 from tabulate import tabulate
 import matplotlib.pyplot as plt
-from utils import *
+from VAN_ex.code.utils import *
 
 
 
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     thres = np.argmax(cumsum_counts>cumsumThres)
     max_match_diff = bins[thres]
 
-    matches_inliers, matches_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers = get_matcherScore_inliers_outliers(matches, thres)
+    matches_inliers, matches_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers = get_matcherScore_inliers_outliers(matches, thres, kpts1, kpts2)
     print("matcher threshold = {}".format(max_match_diff))
     print("num of inliers: {}, num of outliers: {}".format(len(kpts1_inliers), len(kpts1_outliers)))
 

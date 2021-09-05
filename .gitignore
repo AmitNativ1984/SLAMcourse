@@ -128,8 +128,5 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# vscode
-.vscode/
-
 #specific files and folders:
 Van_ex/data/
