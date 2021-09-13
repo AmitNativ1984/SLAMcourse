@@ -6,8 +6,6 @@ from tabulate import tabulate
 import matplotlib.pyplot as plt
 from VAN_ex.code.utils import *
 
-
-
 DATA_PATH = r'./VAN_ex/data/dataset05/sequences/05/'
 NUM_KEYPTS = 1000
 
@@ -29,12 +27,7 @@ if __name__ == "__main__":
     kpts2, desc2 = detect_keyPts(img2)
 
     # draw key points
-    img1bgr = np.dstack((img1, img1, img1))
-    img2bgr = np.dstack((img2, img2, img2))
-    cv2.drawKeypoints(img1bgr, kpts1, img1bgr, color=(255,0,0))
-    cv2.drawKeypoints(img2bgr, kpts2, img2bgr, color=(0,0,255))
-    cv2.imshow("keyPoints [left/right]", np.hstack((img1bgr, img2bgr)))
-    
+    draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]")    
 
     # printing description of first two images
     print(tabulate([[np.array(desc1[0]).reshape(-1, 1), np.array(desc2[0]).reshape(-1, 1)]], headers=['left', 'right']))

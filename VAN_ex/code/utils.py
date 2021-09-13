@@ -8,6 +8,13 @@ def read_images(idx, DATA_PATH):
     img2 = cv2.imread(DATA_PATH + "image_1/" + img_name, 0)
     return img1, img2
 
+def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]"):
+    img1bgr = np.dstack((img1, img1, img1))
+    img2bgr = np.dstack((img2, img2, img2))
+    cv2.drawKeypoints(img1bgr, kpts1, img1bgr, color=(255,0,0))
+    cv2.drawKeypoints(img2bgr, kpts2, img2bgr, color=(0,0,255))
+    cv2.imshow(title, np.hstack((img1bgr, img2bgr)))
+
 def detect_keyPts(img):
     orb = cv2.ORB_create(nfeatures=1000)
     keypts, descriptors = orb.detectAndCompute(img, None)

@@ -9,14 +9,27 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "cwd": "${fileDirname}",
+            "env": {"PYTHONPATH": "/workspaces/SLAMcourse/VAN_ex/code"}
         },
         {
             "name": "ex_1",
             "type": "python",
             "request": "launch",
             "program": "VAN_ex/code/ex_1/main.py",
-            "console": "integratedTerminal"
-        }
+            "console": "integratedTerminal",
+            "cwd": "${fileDirname}",
+            "env": {"PYTHONPATH": "/workspaces/SLAMcourse/VAN_ex/code"}
+        },
+        {
+            "name": "ex_2",
+            "type": "python",
+            "request": "launch",
+            "program": "VAN_ex/code/ex_2/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${fileDirname}",
+            "env": {"PYTHONPATH": "/workspaces/SLAMcourse/VAN_ex/code"}
+        },
     ]
 }
