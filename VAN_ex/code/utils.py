@@ -1,12 +1,17 @@
 import numpy as np
 import cv2
-
+import matplotlib.pyplot as plt
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 def read_images(idx, DATA_PATH):
     img_name = '{:06d}.png'.format(idx)
-    img1 = cv2.imread(DATA_PATH + "image_0/" + img_name, 0)
-    img2 = cv2.imread(DATA_PATH + "image_1/" + img_name, 0)
-    return img1, img2
+    img1str = DATA_PATH + "image_0/" + img_name
+    img1 = cv2.imread(img1str, 0)
+    
+    img2str = DATA_PATH + "image_1/" + img_name
+    img2 = cv2.imread(img2str, 0)
+    return img1, img2, img1str, img2str
 
 def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]"):
     img1bgr = np.dstack((img1, img1, img1))
@@ -14,11 +19,49 @@ def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]"):
     cv2.drawKeypoints(img1bgr, kpts1, img1bgr, color=(255,0,0))
     cv2.drawKeypoints(img2bgr, kpts2, img2bgr, color=(0,0,255))
     cv2.imshow(title, np.hstack((img1bgr, img2bgr)))
+    cv2.waitKey(1)
+    
+def draw_img_pair_kpts(img_pair, title=""):
+    matches_img = cv2.drawMatches(cv2.imread(img_pair["img1"]), img_pair["kpts1"],
+                                  cv2.imread(img_pair["img2"]), img_pair["kpts2"],
+                                  img_pair["inliers"],
+                                  None
+                                  )
+                                  
+    cv2.imshow(title.format(img_pair["img1_idx"], img_pair["img2_idx"]), matches_img)
+    cv2.waitKey(1)
+    pass
 
 def detect_keyPts(img):
     orb = cv2.ORB_create(nfeatures=1000)
     keypts, descriptors = orb.detectAndCompute(img, None)
     return keypts, descriptors
+
+def read_images_and_detect_keyPts(idx, DATA_PATH, plot=False):
+    """[summary]
+
+    Args:
+        idx ([int]): [image pair index]
+        DATA_PATH ([string]): path to data
+        plot (bool, optional): plot images. Defaults to False.
+
+    Returns:
+        img1_dict[dict]: {"idx": idx, "img": img1, "kpts":kpts1, "desc": desc1}
+        img2_dict[dict]: {"idx": idx, "img": img2, "kpts":kpts2, "desc": desc2}
+    """
+    img1, img2, img1path, img2path = read_images(idx, DATA_PATH)
+    kpts1, desc1 = detect_keyPts(img1)
+    kpts2, desc2 = detect_keyPts(img2)
+
+    img1_dict = {"idx": idx, "img_path": img1path, "kpts":kpts1, "desc": desc1}
+    img2_dict = {"idx": idx, "img_path": img2path, "kpts":kpts2, "desc": desc2}
+
+
+    if plot:
+        draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right][{}]".format(idx))
+        cv2.waitKey(1)
+
+    return img1_dict, img2_dict
 
 def read_cameras(datapath):
     with open(datapath + 'calib.txt') as f:
@@ -77,43 +120,149 @@ def get_matcherScore_inliers_outliers(matches, thres, kpts1, kpts2):
     matches_inliers = []
     matches_outliers =[]
     
-    kpts1_inliers = []
-    kpts1_outliers = []
-    kpts2_inliers = []
-    kpts2_outliers = []
     for ind, match in enumerate(matches):
         if match.distance <= thres:
             matches_inliers.append(match)
-            kpts1_inliers.append(kpts1[match.queryIdx])
-            kpts2_inliers.append(kpts2[match.trainIdx])
         else:
             matches_outliers.append(match)
-            kpts1_outliers.append(kpts1[match.queryIdx])
-            kpts2_outliers.append(kpts2[match.trainIdx])
         
-    return matches_inliers, matches_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers,
-
+    return matches_inliers, matches_outliers
 
 def get_rectified_inliers_outliers(kpts1, kpts2, matches, thres):
     match_inliers = []
     match_outliers = []
-    kpts1_inliers = []
-    kpts1_outliers = []
-    kpts2_inliers = []
-    kpts2_outliers = []
+    
     for ind, match in enumerate(matches):
         ver_diff = np.abs(kpts1[match.queryIdx].pt[1] - kpts2[match.trainIdx].pt[1])
         if ver_diff <= thres:
             match_inliers.append(match)
-            kpts1_inliers.append(kpts1[match.queryIdx])
-            kpts2_inliers.append(kpts2[match.queryIdx])
         else:
             match_outliers.append(match)
-            kpts1_outliers.append(kpts1[match.queryIdx])
-            kpts2_outliers.append(kpts2[match.queryIdx])
 
-    return match_inliers, match_outliers, kpts1_inliers, kpts1_outliers, kpts2_inliers, kpts2_outliers
+    return match_inliers, match_outliers
     
+def match_images(img_pair, matcher="bf", cumsumThres = 0.88, plot=False):
+    """[summary]
+
+    Args:
+        image_pair (dict): dict containing left and right images
+    """
+
+    if matcher == "bf":
+        logging.debug("nmatching based on feature BFmatcher distance")
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        matches = bf.match(img_pair["desc1"],img_pair["desc2"])
+
+    # sort matches in descending order
+    
+    matches = sorted(matches, key = lambda x:x.distance)
+
+    if plot:
+        # display first 20 points
+        imgMatches = cv2.drawMatches(img_pair["img1"],img_pair["kpts1"],img_pair["img2"],img_pair["kpts2"],matches[:20],None)
+        cv2.imshow("Matches", imgMatches)
+    
+    # rejecting matches based on matcher distance (taking 88% of matches)
+    match_dist = []
+    for m in matches:
+        match_dist.append(m.distance)
+        
+    counts, bins = plot_histogram(match_dist, plot=plot)
+    cumsum_counts = np.cumsum(counts)
+    thres = np.argmax(cumsum_counts>cumsumThres)
+    max_match_diff = bins[thres]
+    matches_inliers, matches_outliers = get_matcherScore_inliers_outliers(matches, thres, img_pair["kpts1"], img_pair["kpts2"])
+    logging.debug("matcher threshold = {}".format(max_match_diff))
+    logging.debug("num of inliers: {}, num of outliers: {}".format(len(matches_inliers), len(matches_outliers)))
+
+    img_pair["inliers"] = matches_inliers       
+    img_pair["outliers"] = matches_outliers
+    img_pair["method"] = "features"
+    return img_pair
+
+def match_rectified_images(img_pair, feature_matcher="bf", ver_px_diff=2, cumsumThres=0.88, plot=False):
+    """ matching two rectified images
+
+    Args:
+        img_pair ([dict]): first match based on features, then match
+        ver_px_diff (int, optional): Max vertical distance between key points in a rectified image. Defaults to 2.
+        cumsumThres (float, optional): percent of sorted matches qualified as "good". Defaults to 0.88.
+    """
+
+    img_pair = match_images(img_pair, matcher=feature_matcher, cumsumThres=cumsumThres)    # match images according to feature distance
+    
+    # rejecting outliers that exceed 2 pixels difference:
+    inliers, outliers = get_rectified_inliers_outliers(img_pair["kpts1"], img_pair["kpts2"], img_pair["inliers"], thres=ver_px_diff)
+    img_pair["method"] = "features rectified"
+    img_pair["inliers"] = inliers
+    img_pair["outliers"] += outliers
+
+    return img_pair
+
+def plot_histogram(x, plot=False):
+    counts, bins = np.histogram(x, bins=list(range(0, 100, 1)))
+    counts = counts.astype(np.float)
+    counts *= 1 / counts.sum()
+    if plot:
+        plt.figure(1)
+        plt.bar(bins[:-1], counts)
+        plt.ylim((0,1))
+
+    return counts, bins
+
+def create_img_pair_from_img_dicts(img1_dict, img2_dict):
+    """ generate dict representing image pair
+
+    Args:
+        img1_dict (dict): {"idx": idx, "img": img, "kpts":kpts, "desc": desc}
+        img2_dict (dict): {"idx": idx, "img": img, "kpts":kpts, "desc": desc}
+    
+     Returns:
+        imgPair (dict): {"img1_idx": img1_dict["idx"],
+                        "img2_idx": img2_dict["idx"],
+                        "kpts1": img1_dict["kpts"],
+                        "desc1": img1_dict["desc"],
+                        "kpts2": img2_dict["kpts"],
+                        "desc2": img2_dict["desc"],
+                        "img1": img1_dict["img_path"],
+                        "img2": img2_dict["img_path"]}
+    
+    """
+
+    imgPair = (
+                {"img1_idx": img1_dict["idx"],
+                "img2_idx": img2_dict["idx"],
+                "kpts1": img1_dict["kpts"],
+                "desc1": img1_dict["desc"],
+                "kpts2": img2_dict["kpts"],
+                "desc2": img2_dict["desc"],
+                "img1": img1_dict["img_path"],
+                "img2": img2_dict["img_path"]}
+    )
+
+    return imgPair
+
+def generate_point_cloud(img_pair, P, Q, plot=False):
+    # traingulating points:
+    point_cloud = []
+    
+    kpts1kpts2 = np.array([img_pair["kpts1"][match.queryIdx].pt + img_pair["kpts2"][match.trainIdx].pt for match in img_pair["inliers"]])
+    kpts1 = kpts1kpts2[..., :2].transpose()
+    kpts2 = kpts1kpts2[..., 2:].transpose()
+
+    x4D = cv2.triangulatePoints(P, Q, kpts1, kpts2)
+
+    point_cloud = x4D[:3, :] / x4D[3, :]
+    
+    if plot:
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+        ax.scatter(point_cloud[0, :], point_cloud[1, :], point_cloud[2, :], alpha=0.5, facecolors="None", color='blue')
+        ax.set_xlabel('X [m]')
+        ax.set_ylabel('Y [m]')
+        ax.set_zlabel('Z [m]')
+    
+    return point_cloud
 
 if __name__ == "__main__":
     datapath = "/workspaces/SLAMcourse/VAN_ex/data/dataset05/sequences/05/"

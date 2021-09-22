@@ -26,7 +26,7 @@
             "name": "ex_2",
             "type": "python",
             "request": "launch",
-            "program": "VAN_ex/code/ex_2/main.py",
+            "program": "/workspaces/SLAMcourse/VAN_ex/code/ex_2/main.py",
             "console": "integratedTerminal",
             "cwd": "${fileDirname}",
             "env": {"PYTHONPATH": "/workspaces/SLAMcourse/VAN_ex/code"}
