@@ -237,7 +237,9 @@ def create_img_pair_from_img_dicts(img1_dict, img2_dict):
                 "kpts2": img2_dict["kpts"],
                 "desc2": img2_dict["desc"],
                 "img1": img1_dict["img_path"],
-                "img2": img2_dict["img_path"]}
+                "img2": img2_dict["img_path"],
+                "inliers": [],
+                "outliers": []}
     )
 
     return imgPair
@@ -263,6 +265,60 @@ def generate_point_cloud(img_pair, P, Q, plot=False):
         ax.set_zlabel('Z [m]')
     
     return point_cloud
+
+def get_consistent_matches_between_frames(frame_seq, img_pair, frame_idx):
+    """
+    clean outliers, by removing key points matches between two frames taken from same camera, 
+    but don't have inliers between left and right cameras on same frame.
+
+    Args:
+        frame_seq [dict]: matches between two frames of same camera
+        img_pair [dict]: matches between same frame, taken from two cameras
+        frame_idx [idx]: idx of which frame_seq to use
+
+    Returns:
+        [list(int)]: matches that are consistent between frames and between cameras
+    """
+    
+    def clean_outliers(matches_dict, kpts_left_img_frame1, kpts_left_img_frame2):
+        inliers = []
+        for match in matches_dict["inliers"]:
+            if match.queryIdx in kpts_left_img_frame1 and match.trainIdx in kpts_left_img_frame2:
+                inliers.append(match)
+            else:
+                matches_dict["outliers"].append(match)
+
+        matches_dict["inliers"] = inliers
+        logging.info("removed {} inliers".format(len(inliers)))
+
+        return matches_dict
+
+    # inliers between same camera on two different frames
+    inliers_frames = np.array([[match.queryIdx, match.trainIdx] for match in frame_seq[frame_idx]["inliers"]])
+    inliers_frame0 = img_pair[frame_seq[frame_idx]["img1_idx"]]["inliers"]
+    inliers_frame1 = img_pair[frame_seq[frame_idx]["img2_idx"]]["inliers"]
+
+    kpts1_pair1 = set([match.queryIdx for match in img_pair[frame_seq[frame_idx]["img1_idx"]]["inliers"]])  # kpts idx of image in first pair
+    kpts1_pair2 = set([match.queryIdx for match in img_pair[frame_seq[frame_idx]["img2_idx"]]["inliers"]])  # kpts idx of image in first pair
+
+    kpts1_frame1 = set(inliers_frames[:, 0])
+    kpts1_frame2 = set(inliers_frames[:, 1])
+
+    # get kpts that appear on left image between frames, and also have matches on right image
+    kpts_left_img_frame1 = list(kpts1_frame1.intersection(kpts1_pair1))
+    kpts_left_img_frame2 = list(kpts1_frame2.intersection(kpts1_pair2))
+    
+    # cleaning outliers in frame_seq
+    logging.info("removing outliers according to matches between frame {} and frame {}".format(frame_seq[frame_idx]["img1_idx"], frame_seq[frame_idx]["img2_idx"]))
+    frame_seq[frame_idx] = clean_outliers(frame_seq[frame_idx], kpts_left_img_frame1, kpts_left_img_frame2)
+    
+    logging.info("removing outliers of image pair on frame {}, that are not found on frame {}".format(frame_seq[frame_idx]["img1_idx"], frame_seq[frame_idx]["img2_idx"]))
+    img_pair[frame_seq[frame_idx]["img1_idx"]] = clean_outliers(img_pair[frame_seq[frame_idx]["img1_idx"]], kpts_left_img_frame1, kpts_left_img_frame2)
+
+    logging.info("removing outliers in image pair of frame {}, that are not found on frame {}".format(frame_seq[frame_idx]["img2_idx"], frame_seq[frame_idx]["img1_idx"]))
+    img_pair[frame_seq[frame_idx]["img2_idx"]] = clean_outliers(img_pair[frame_seq[frame_idx]["img2_idx"]], kpts_left_img_frame1, kpts_left_img_frame2)
+       
+    return frame_seq, img_pair
 
 if __name__ == "__main__":
     datapath = "/workspaces/SLAMcourse/VAN_ex/data/dataset05/sequences/05/"

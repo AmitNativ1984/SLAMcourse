@@ -30,6 +30,7 @@ if __name__ == "__main__":
                 } 
     )
     """
+    print("\n")
     logging.info("==== Answer [2.1]:=====")
     point_cloud = []
     left_imgs = []
@@ -49,6 +50,7 @@ if __name__ == "__main__":
 
     
     # match points in two left images
+    print("\n")
     logging.info("===== Answer [2.2] =====")
     left_frames_seq = []
     for idx in range(0, 1):
@@ -57,8 +59,14 @@ if __name__ == "__main__":
         draw_img_pair_kpts(left_frames_seq[idx], title="matched seq:[left {}, left {}]")
         logging.info("matched features in frame seq: left[{}], left[{}]".format(idx, idx+1))
     
-    
-    
+    print("\n")
+    logging.info("===== Answer [2.3] =====")
+    # finding kpts that were matches between subsequant left image frames, and between left and right image frames
+    # thest are matches that are found in: inliers[left0, right0]; inliers[left0, left1]; inliers[left1, right1]
+    for frame_idx in range(0, 1):
+        frame_seq, img_pair = get_consistent_matches_between_frames(left_frames_seq, img_pair, frame_idx)
+
+
     
     plt.show()
     cv2.waitKey(0)
