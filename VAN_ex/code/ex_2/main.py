@@ -64,7 +64,7 @@ if __name__ == "__main__":
     # finding kpts that were matches between subsequant left image frames, and between left and right image frames
     # thest are matches that are found in: inliers[left0, right0]; inliers[left0, left1]; inliers[left1, right1]
     for frame_idx in range(0, 1):
-        frame_seq, img_pair = get_consistent_matches_between_frames(left_frames_seq, img_pair, frame_idx)
+        frame_seq, img_pair = get_consistent_matches_between_frames(left_frames_seq[frame_idx], img_pair)
 
 
     

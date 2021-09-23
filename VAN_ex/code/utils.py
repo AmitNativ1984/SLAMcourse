@@ -266,7 +266,7 @@ def generate_point_cloud(img_pair, P, Q, plot=False):
     
     return point_cloud
 
-def get_consistent_matches_between_frames(frame_seq, img_pair, frame_idx):
+def get_consistent_matches_between_frames(frame_seq, img_pair):
     """
     clean outliers, by removing key points matches between two frames taken from same camera, 
     but don't have inliers between left and right cameras on same frame.
@@ -274,50 +274,47 @@ def get_consistent_matches_between_frames(frame_seq, img_pair, frame_idx):
     Args:
         frame_seq [dict]: matches between two frames of same camera
         img_pair [dict]: matches between same frame, taken from two cameras
-        frame_idx [idx]: idx of which frame_seq to use
 
     Returns:
         [list(int)]: matches that are consistent between frames and between cameras
     """
-    
-    def clean_outliers(matches_dict, kpts_left_img_frame1, kpts_left_img_frame2):
-        inliers = []
-        for match in matches_dict["inliers"]:
-            if match.queryIdx in kpts_left_img_frame1 and match.trainIdx in kpts_left_img_frame2:
-                inliers.append(match)
-            else:
-                matches_dict["outliers"].append(match)
 
-        matches_dict["inliers"] = inliers
-        logging.info("removed {} inliers".format(len(inliers)))
+    frame_seq_queryIdx = [match.queryIdx for match in frame_seq["inliers"]]
+    frame_seq_trainIdx = [match.trainIdx for match in frame_seq["inliers"]]
 
-        return matches_dict
+    img_pair2_queryIdx  = [match.queryIdx for match in img_pair[frame_seq["img2_idx"]]["inliers"]]
 
-    # inliers between same camera on two different frames
-    inliers_frames = np.array([[match.queryIdx, match.trainIdx] for match in frame_seq[frame_idx]["inliers"]])
-    inliers_frame0 = img_pair[frame_seq[frame_idx]["img1_idx"]]["inliers"]
-    inliers_frame1 = img_pair[frame_seq[frame_idx]["img2_idx"]]["inliers"]
+    inliers_frame1 = []
+    inliers_frame2 = []
+    inliers_between_frames = []
+    for img_pair1_match_idx, img_pair1_match in enumerate(img_pair[frame_seq["img1_idx"]]["inliers"]):
+        # does kpts1 in this image pair also exists in match between frames?
+        try:
+            match_between_frames_idx = frame_seq_queryIdx.index(img_pair1_match.queryIdx)
+        except Exception: 
+            img_pair[frame_seq["img1_idx"]]["outliers"].append(img_pair1_match)
+            continue
 
-    kpts1_pair1 = set([match.queryIdx for match in img_pair[frame_seq[frame_idx]["img1_idx"]]["inliers"]])  # kpts idx of image in first pair
-    kpts1_pair2 = set([match.queryIdx for match in img_pair[frame_seq[frame_idx]["img2_idx"]]["inliers"]])  # kpts idx of image in first pair
+        fram0_img1_kpt = img_pair1_match.queryIdx
+        # what is kpt index on the ?
+        try:
+            img_pair2_inlier_idx = img_pair2_queryIdx.index(frame_seq["inliers"][match_between_frames_idx].trainIdx)
+        
+        except Exception: 
+            continue
+        
+        inliers_frame1.append(img_pair[frame_seq["img1_idx"]]["inliers"][img_pair1_match_idx])
+        inliers_frame2.append(img_pair[frame_seq["img2_idx"]]["inliers"][img_pair2_inlier_idx])
+        inliers_between_frames.append(frame_seq["inliers"][match_between_frames_idx])
+                
+    img_pair[frame_seq["img1_idx"]]["inliers"] = inliers_frame1
+    img_pair[frame_seq["img2_idx"]]["inliers"] = inliers_frame2
+    frame_seq["inliers"] = inliers_between_frames
 
-    kpts1_frame1 = set(inliers_frames[:, 0])
-    kpts1_frame2 = set(inliers_frames[:, 1])
+    logging.info("inliers frame {}: {}; inliers frame {}: {}".format(frame_seq["img1_idx"], len(img_pair[frame_seq["img1_idx"]]["inliers"]),
+                                                                 frame_seq["img2_idx"], len(img_pair[frame_seq["img2_idx"]]["inliers"])))
 
-    # get kpts that appear on left image between frames, and also have matches on right image
-    kpts_left_img_frame1 = list(kpts1_frame1.intersection(kpts1_pair1))
-    kpts_left_img_frame2 = list(kpts1_frame2.intersection(kpts1_pair2))
-    
-    # cleaning outliers in frame_seq
-    logging.info("removing outliers according to matches between frame {} and frame {}".format(frame_seq[frame_idx]["img1_idx"], frame_seq[frame_idx]["img2_idx"]))
-    frame_seq[frame_idx] = clean_outliers(frame_seq[frame_idx], kpts_left_img_frame1, kpts_left_img_frame2)
-    
-    logging.info("removing outliers of image pair on frame {}, that are not found on frame {}".format(frame_seq[frame_idx]["img1_idx"], frame_seq[frame_idx]["img2_idx"]))
-    img_pair[frame_seq[frame_idx]["img1_idx"]] = clean_outliers(img_pair[frame_seq[frame_idx]["img1_idx"]], kpts_left_img_frame1, kpts_left_img_frame2)
-
-    logging.info("removing outliers in image pair of frame {}, that are not found on frame {}".format(frame_seq[frame_idx]["img2_idx"], frame_seq[frame_idx]["img1_idx"]))
-    img_pair[frame_seq[frame_idx]["img2_idx"]] = clean_outliers(img_pair[frame_seq[frame_idx]["img2_idx"]], kpts_left_img_frame1, kpts_left_img_frame2)
-       
+ 
     return frame_seq, img_pair
 
 if __name__ == "__main__":
