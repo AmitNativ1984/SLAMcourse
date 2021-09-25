@@ -244,11 +244,25 @@ def create_img_pair_from_img_dicts(img1_dict, img2_dict):
 
     return imgPair
 
-def generate_point_cloud(img_pair, P, Q, plot=False):
+def generate_point_cloud(img_pair, P, Q, inliers_idx=None, plot=False):
+    """generate point cloud from a single image pair (left and right cameras)
+
+    Args:
+        img_pair (dict): [description]
+        P (ndarray): camera matrix left cam
+        Q ([type]): camera matrix right cam
+        plot (bool, optional): plot point cloud. Defaults to False.
+
+    Returns:
+        point_cloud (3 X N array): point in cartesian coordinates
+    """
     # traingulating points:
     point_cloud = []
+    if inliers_idx is None:
+        kpts1kpts2 = np.array([img_pair["kpts1"][match.queryIdx].pt + img_pair["kpts2"][match.trainIdx].pt for match in img_pair["inliers"]])
+    else:
+        kpts1kpts2 = np.array([img_pair["kpts1"][match.queryIdx].pt + img_pair["kpts2"][match.trainIdx].pt for idx, match in enumerate(img_pair["inliers"]) if idx in inliers_idx])
     
-    kpts1kpts2 = np.array([img_pair["kpts1"][match.queryIdx].pt + img_pair["kpts2"][match.trainIdx].pt for match in img_pair["inliers"]])
     kpts1 = kpts1kpts2[..., :2].transpose()
     kpts2 = kpts1kpts2[..., 2:].transpose()
 
@@ -276,7 +290,8 @@ def get_consistent_matches_between_frames(frame_seq, img_pair):
         img_pair [dict]: matches between same frame, taken from two cameras
 
     Returns:
-        [list(int)]: matches that are consistent between frames and between cameras
+        frame_seq: matches between two frames of left camera
+        img_pair: matches with key points also matching on prev frame
     """
 
     frame_seq_queryIdx = [match.queryIdx for match in frame_seq["inliers"]]
