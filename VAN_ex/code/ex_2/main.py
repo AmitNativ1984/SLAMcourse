@@ -69,17 +69,42 @@ if __name__ == "__main__":
 
 
     # randomly select 4 key-points that were matched on all four images (2 image pairs from frame0 and frame 1)
-    frame0_3D_pt_idx = []
-    frame1_3D_pt_idx = []
     idx = 0
-    
     # building point cloud only from key points that are matched on all four images (2 image pairs from frame0 and frame1)
     points_idx = random.sample(range(len(left_cam_pairs[idx]["inliers"])), 4)
-    point_cloud_4frames_kpts = []
-    for pair in range(0, 2):
-        point_cloud_4frames_kpts.append(generate_point_cloud(img_pairs[pair], P, Q,inliers_idx=points_idx, plot=True))
+    world_points = generate_point_cloud(img_pairs[idx], P, Q, inliers_idx=points_idx, plot=True)
+    generate_point_cloud(img_pairs[idx+1], P, Q, inliers_idx=points_idx, plot=True)
 
+    logging.info("3D world coordinates from frame 0:")
+    logging.info(world_points)
+    logging.info("using frame0 points to as TRUE 3D position for PnP calculation on frame 1")
+    
+    image_points = np.array([img_pairs[1]["kpts1"][ind].pt for ind in points_idx])
 
+    # calculate PnP:
+    success, R1, t1 = cv2.solvePnP(objectPoints=world_points.transpose(), 
+                          imagePoints=image_points,
+                          cameraMatrix=P[:,:3], 
+                          distCoeffs=np.zeros((4,1)),
+                          flags=cv2.SOLVEPNP_P3P
+    )
+    R1, jacobian = cv2.Rodrigues(R1)
+    # Xc = RXw + T = [R | T]
+    # To find camera position, we have to find Xw such that Xc = 0
+    # Xw = inv(R)Xc - inv(R)T = [inv(R) | -inv(R)T]
+    # Because R is unitary: inv(R) = R':
+    # Xw = R'Xc - R'T = [R' | -R'T]
+
+    logging.info("frame left {} PnP solution: R={}".format(1, R1))
+    logging.info("frame left {} PnP solution: T={}".format(1, t1.transpose()))
+
+    camPos = -R1.transpose() @ t1
+    camRot = R1.transpose()
+
+    # get camera rotation:
+    yaw_pitch_roll_radians = cv2.decomposeProjectionMatrix(projMatrix=R1.transpose, cameraMatrix=K)
+
+    logging.info("frame {} cam Pos: {}".format(1, camPos))
 
     plt.show()
     cv2.waitKey(0)
