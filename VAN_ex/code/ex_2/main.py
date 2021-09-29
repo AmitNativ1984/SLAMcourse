@@ -98,13 +98,38 @@ if __name__ == "__main__":
     logging.info("frame left {} PnP solution: R={}".format(1, R1))
     logging.info("frame left {} PnP solution: T={}".format(1, t1.transpose()))
 
-    camPos = -R1.transpose() @ t1
-    camRot = R1.transpose()
-
+    camPos_left = []
+    camRot_left = []
+    camPos_right = []
+    camRot_right = []
+    yaw_pitch_roll = []
+    
+    camPos_left.append(np.zeros((3,1)))
+    camRot_left.append(M1[:, :3])
+    
+    camPos_left.append(-R1.transpose() @ t1)
+    camRot_left.append(R1.transpose())
     # get camera rotation:
-    yaw_pitch_roll_radians = cv2.decomposeProjectionMatrix(projMatrix=R1.transpose, cameraMatrix=K)
+    yaw_pitch_roll.append(cv2.decomposeProjectionMatrix(projMatrix=np.hstack((camRot_left[0], camPos_left[0])), cameraMatrix=K)[6])
 
-    logging.info("frame {} cam Pos: {}".format(1, camPos))
+    fig = plt.figure()
+    # ax = fig.add_subplot(projection='3d')
+    ax = fig.add_subplot()
+    for idx in range(0, 2):
+        # calculating position of right camera
+        camPos_right.append(camPos_left[idx] - M2[:, -1].reshape(-1, 1))
+        camRot_right.append(camRot_left[idx])
+        yaw_pitch_roll.append(cv2.decomposeProjectionMatrix(projMatrix=np.hstack((camRot_left[idx], camPos_left[idx])), cameraMatrix=K)[6])
+        logging.info("frame {} LEFT:  cam Pos={}[m]; yaw={}[deg], pitch={}[deg], roll={}[deg]".format(idx, camPos_left[idx].transpose()[0], yaw_pitch_roll[idx][0], yaw_pitch_roll[0][1], yaw_pitch_roll[idx][2]))
+        logging.info("frame {} RIGHT: cam Pos={}[m]; yaw={}[deg], pitch={}[deg], roll={}[deg]".format(idx, camPos_right[idx].transpose()[0], yaw_pitch_roll[idx][0], yaw_pitch_roll[idx][1], yaw_pitch_roll[idx][2]))
+        plt.scatter(camPos_left[idx][0], camPos_left[idx][2], marker='o', alpha=0.5, facecolors="None", color='blue')
+        plt.scatter(camPos_right[idx][0], camPos_right[idx][2], marker='^', alpha=0.5, facecolors="None", color='blue')
 
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    # ax.set_zlabel('Z [m]')
+
+    #
+    
     plt.show()
     cv2.waitKey(0)
