@@ -3,7 +3,7 @@ from utils import *
 import matplotlib.pyplot as plt
 import random
 
-DATA_PATH = r'../../data/dataset05/sequences/05/'
+DATA_PATH = r'../data/dataset05/sequences/05/'
 
 if __name__ == "__main__":
     """ [2.1] match image pair #1 """
@@ -19,15 +19,10 @@ if __name__ == "__main__":
     imgPair = (
                 {"left_img_idx": img1_dict["idx"],
                 "right_img_idx": img2_dict["idx"],
-                "kpts1": img1_dict["kpts"],
-                "desc1": img1_dict["desc"],
-                "kpts2": img2_dict["kpts"],
-                "desc2": img2_dict["desc"],
-                "left_img": img1_dict["img"],
-                "right_img": img2_dict["img"],
                 "method": "features",
-                "inliers": macth inliers,
-                "outliers":  match outliers
+                "matches": match results
+                "inliers": inds to inliers 
+                "point_cloud": 3D point cloud of all matches
                 } 
     )
     """
@@ -42,11 +37,11 @@ if __name__ == "__main__":
         right_imgs.append(img2_dict)
         img_pairs.append(create_img_pair_from_img_dicts(left_imgs[idx], right_imgs[idx]))
         # match key points
-        img_pairs[idx] = match_rectified_images(img_pairs[idx], feature_matcher="bf", cumsumThres = 0.88, plot=False)
-        draw_img_pair_kpts(img_pairs[idx], title="matched pairs:[left {}, right {}]")
+        img_pairs[idx] = match_rectified_images(img_pairs[idx], left_imgs[idx], right_imgs[idx], feature_matcher="bf", cumsumThres = 0.88, plot=False)
+        draw_img_pair_kpts(img_pairs[idx], left_imgs[idx], right_imgs[idx], title="img pair:[left {}, right {}]")
 
         # get point cloud
-        point_cloud.append(generate_point_cloud(img_pairs[idx], P, Q, plot=True))
+        img_pairs[idx] = generate_point_cloud(img_pairs[idx], left_imgs[idx], right_imgs[idx], P, Q, plot=True)
         logging.info("calculated 3D point cloud for image pair {}".format(idx))
 
     
@@ -55,40 +50,73 @@ if __name__ == "__main__":
     logging.info("===== Answer [2.2] =====")
     left_cam_pairs = []
     for idx in range(0, 1):
-        left_cam_pairs.append(create_img_pair_from_img_dicts(left_imgs[idx], left_imgs[idx + 1])) 
-        left_cam_pairs[idx] = match_images(left_cam_pairs[idx], matcher="bf", cumsumThres=0.88, plot=False)
-        draw_img_pair_kpts(left_cam_pairs[idx], title="matched seq:[left {}, left {}]")
+        left_cam_pairs.append(create_frame_pair_from_img_dicts(left_imgs[idx], left_imgs[idx + 1])) 
+        left_cam_pairs[idx] = match_images(left_cam_pairs[idx], left_imgs[idx], left_imgs[idx+1], matcher="bf", cumsumThres=0.88, plot=False)
+        left_cam_pairs[idx] = get_consistent_matches_between_frames(left_cam_pairs[idx], img_pairs, left_imgs, right_imgs)
+        draw_img_pair_kpts(left_cam_pairs[idx], left_imgs[idx], left_imgs[idx+1], title="frame pair:[left {}, left {}]")
         logging.info("matched features in frame seq: left[{}], left[{}]".format(idx, idx+1))
     
     print("\n")
     logging.info("===== Answer [2.3] =====")
-    # finding kpts that were matches between subsequant left image frames, and between left and right image frames
-    # thest are matches that are found in: inliers[left0, right0]; inliers[left0, left1]; inliers[left1, right1]
-    for frame_idx in range(0, 1):
-        left_cam_pairs[frame_idx], img_pairs = get_consistent_matches_between_frames(left_cam_pairs[frame_idx], img_pairs)
+    """
+        (*) Define [R|t] a transformation T that transofrms from left0 coordinate system to left1:
+            1. We have 3D object points in left0 coordinate systems.
+            2. We have the matching pixels in left1 camera.
+            3. Use cv2.solvePnP to get [R|t] - the transformation of 3D points in left0 coordinates to left1 coordinates.
+        (*) Camera A hase extrinsics [I|0]. T(A->B) = R1x + t1; the transofrmation of 3D points to camera B coordinates.
+            T(B->C) = R2x + t2; the trasnformation from B to camera C coordinate system. What is T(A->C)?
+            
+            1. T(A->C) = T(B->C)[T(A->B)] = R2(R1x + t1) + t2 = R2R1x + R2t1 + t1 = [R2R1 | (R2 + I)t1]
+        
+        (*) For a camera with extrinsic matrix [R|t], what is the location of the camera in the global
+            coordinate system?
 
+            1. 0 = Rx + t, so that Xw = -R't
+    """
+
+    # finding kpts that were matches between left0, right1, left1, right1.
+    # thest are matches that are found in: inliers[left0, right0]; inliers[left0, left1]; inliers[left1, right1]
 
     # randomly select 4 key-points that were matched on all four images (2 image pairs from frame0 and frame 1)
     idx = 0
     # building point cloud only from key points that are matched on all four images (2 image pairs from frame0 and frame1)
-    points_idx = random.sample(range(len(left_cam_pairs[idx]["inliers"])), 4)
-    world_points = generate_point_cloud(img_pairs[idx], P, Q, inliers_idx=points_idx, plot=True)
-    generate_point_cloud(img_pairs[idx+1], P, Q, inliers_idx=points_idx, plot=True)
+    success = False
+    while not success:
+        match_between_frames_idx = random.sample(range(len(left_cam_pairs[idx]["inliers"])), 4)
+        
+        left0_kpt_ind = []
+        left1_kpt_ind = []
+        for match_idx in match_between_frames_idx:
+            left0_kpt_ind.append(is_inlier(left_cam_pairs[idx]["inliers"][match_idx].queryIdx, img_pairs[idx], "queryIdx")[1])
+            left1_kpt_ind.append(is_inlier(left_cam_pairs[idx]["inliers"][match_idx].trainIdx, img_pairs[idx+1], "queryIdx")[1])
+        
+            frame0
 
-    logging.info("3D world coordinates from frame 0:")
-    logging.info(world_points)
-    logging.info("using frame0 points to as TRUE 3D position for PnP calculation on frame 1")
-    
-    image_points = np.array([img_pairs[1]["kpts1"][ind].pt for ind in points_idx])
 
-    # calculate PnP:
-    success, R1, t1 = cv2.solvePnP(objectPoints=world_points.transpose(), 
-                          imagePoints=image_points,
-                          cameraMatrix=P[:,:3], 
-                          distCoeffs=np.zeros((4,1)),
-                          flags=cv2.SOLVEPNP_P3P
-    )
-    R1, jacobian = cv2.Rodrigues(R1)
+        logging.info("3D world coordinates from frame 0:")
+        logging.info(world_points)
+        logging.info("using frame0 points to as TRUE 3D position for PnP calculation on frame 1")
+        
+        image_points = np.array([img_pairs[1]["kpts1"][ind].pt for ind in points_idx])
+
+        # calculate PnP:
+        success, R1, t1 = cv2.solvePnP(objectPoints=world_points.transpose(), 
+                            imagePoints=image_points,
+                            cameraMatrix=P[:,:3], 
+                            distCoeffs=np.zeros((4,1)),
+                            flags=cv2.SOLVEPNP_P3P
+        )
+        try:
+            R1, jacobian = cv2.Rodrigues(R1)
+            success=True
+            logging.info("PnP succeeded")
+        except Exception as exception:
+            logging.info("PnP failed")
+            logging.warning(exception)
+            success=False
+
+
+
     # Xc = RXw + T = [R | T]
     # To find camera position, we have to find Xw such that Xc = 0
     # Xw = inv(R)Xc - inv(R)T = [inv(R) | -inv(R)T]
@@ -132,4 +160,4 @@ if __name__ == "__main__":
     #
     
     plt.show()
-    cv2.waitKey(0)
+    cv2.waitKey(1)

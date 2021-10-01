@@ -1,3 +1,4 @@
+from operator import truediv
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
@@ -21,10 +22,11 @@ def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]"):
     cv2.imshow(title, np.hstack((img1bgr, img2bgr)))
     cv2.waitKey(1)
     
-def draw_img_pair_kpts(img_pair, title=""):
-    matches_img = cv2.drawMatches(cv2.imread(img_pair["img1"]), img_pair["kpts1"],
-                                  cv2.imread(img_pair["img2"]), img_pair["kpts2"],
-                                  img_pair["inliers"],
+def draw_img_pair_kpts(img_pair, left_img, right_img, title=""):
+    matches = np.array(img_pair["matches"])[img_pair["inliers"]]
+    matches_img = cv2.drawMatches(cv2.imread(left_img["img_path"]), left_img["kpts"],
+                                  cv2.imread(left_img["img_path"]), right_img["kpts"],
+                                  matches,
                                   None
                                   )
                                   
@@ -122,9 +124,9 @@ def get_matcherScore_inliers_outliers(matches, thres, kpts1, kpts2):
     
     for ind, match in enumerate(matches):
         if match.distance <= thres:
-            matches_inliers.append(match)
+            matches_inliers.append(ind)
         else:
-            matches_outliers.append(match)
+            matches_outliers.append(ind)
         
     return matches_inliers, matches_outliers
 
@@ -135,13 +137,13 @@ def get_rectified_inliers_outliers(kpts1, kpts2, matches, thres):
     for ind, match in enumerate(matches):
         ver_diff = np.abs(kpts1[match.queryIdx].pt[1] - kpts2[match.trainIdx].pt[1])
         if ver_diff <= thres:
-            match_inliers.append(match)
+            match_inliers.append(ind)
         else:
-            match_outliers.append(match)
+            match_outliers.append(ind)
 
     return match_inliers, match_outliers
     
-def match_images(img_pair, matcher="bf", cumsumThres = 0.88, plot=False):
+def match_images(img_pair, left_img, right_img, matcher="bf", cumsumThres = 0.88, plot=False):
     """[summary]
 
     Args:
@@ -151,7 +153,7 @@ def match_images(img_pair, matcher="bf", cumsumThres = 0.88, plot=False):
     if matcher == "bf":
         logging.debug("nmatching based on feature BFmatcher distance")
         bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-        matches = bf.match(img_pair["desc1"],img_pair["desc2"])
+        matches = bf.match(left_img["desc"],right_img["desc"])
 
     # sort matches in descending order
     
@@ -159,8 +161,9 @@ def match_images(img_pair, matcher="bf", cumsumThres = 0.88, plot=False):
 
     if plot:
         # display first 20 points
-        imgMatches = cv2.drawMatches(img_pair["img1"],img_pair["kpts1"],img_pair["img2"],img_pair["kpts2"],matches[:20],None)
-        cv2.imshow("Matches", imgMatches)
+        imgMatches = cv2.drawMatches(cv2.imread(left_img["img_path"]),left_img["kpts"],right_img["img_path"],right_img["kpts"],matches[:20],None)
+        plt.figure(name="Matches")
+        plt.imshow(imgMatches)
     
     # rejecting matches based on matcher distance (taking 88% of matches)
     match_dist = []
@@ -171,16 +174,17 @@ def match_images(img_pair, matcher="bf", cumsumThres = 0.88, plot=False):
     cumsum_counts = np.cumsum(counts)
     thres = np.argmax(cumsum_counts>cumsumThres)
     max_match_diff = bins[thres]
-    matches_inliers, matches_outliers = get_matcherScore_inliers_outliers(matches, thres, img_pair["kpts1"], img_pair["kpts2"])
+    matches_inliers, matches_outliers = get_matcherScore_inliers_outliers(matches, thres, left_img["kpts"], right_img["kpts"])
     logging.debug("matcher threshold = {}".format(max_match_diff))
     logging.debug("num of inliers: {}, num of outliers: {}".format(len(matches_inliers), len(matches_outliers)))
 
+    img_pair["matches"] = matches
     img_pair["inliers"] = matches_inliers       
     img_pair["outliers"] = matches_outliers
     img_pair["method"] = "features"
     return img_pair
 
-def match_rectified_images(img_pair, feature_matcher="bf", ver_px_diff=2, cumsumThres=0.88, plot=False):
+def match_rectified_images(img_pair, left_img, right_img, feature_matcher="bf", ver_px_diff=2, cumsumThres=0.88, plot=False):
     """ matching two rectified images
 
     Args:
@@ -189,13 +193,12 @@ def match_rectified_images(img_pair, feature_matcher="bf", ver_px_diff=2, cumsum
         cumsumThres (float, optional): percent of sorted matches qualified as "good". Defaults to 0.88.
     """
 
-    img_pair = match_images(img_pair, matcher=feature_matcher, cumsumThres=cumsumThres)    # match images according to feature distance
+    img_pair = match_images(img_pair, left_img, right_img, matcher=feature_matcher, cumsumThres=cumsumThres)    # match images according to feature distance
     
     # rejecting outliers that exceed 2 pixels difference:
-    inliers, outliers = get_rectified_inliers_outliers(img_pair["kpts1"], img_pair["kpts2"], img_pair["inliers"], thres=ver_px_diff)
+    inliers, outliers = get_rectified_inliers_outliers(left_img["kpts"], right_img["kpts"], img_pair["matches"], thres=ver_px_diff)
     img_pair["method"] = "features rectified"
     img_pair["inliers"] = inliers
-    img_pair["outliers"] += outliers
 
     return img_pair
 
@@ -220,31 +223,47 @@ def create_img_pair_from_img_dicts(img1_dict, img2_dict):
      Returns:
         imgPair (dict): {"img1_idx": img1_dict["idx"],
                         "img2_idx": img2_dict["idx"],
-                        "kpts1": img1_dict["kpts"],
-                        "desc1": img1_dict["desc"],
-                        "kpts2": img2_dict["kpts"],
-                        "desc2": img2_dict["desc"],
-                        "img1": img1_dict["img_path"],
-                        "img2": img2_dict["img_path"]}
-    
+                        "matches": match results
+                        "inliers": inds to inliers
+                        }
     """
 
-    imgPair = (
-                {"img1_idx": img1_dict["idx"],
-                "img2_idx": img2_dict["idx"],
-                "kpts1": img1_dict["kpts"],
-                "desc1": img1_dict["desc"],
-                "kpts2": img2_dict["kpts"],
-                "desc2": img2_dict["desc"],
-                "img1": img1_dict["img_path"],
-                "img2": img2_dict["img_path"],
-                "inliers": [],
-                "outliers": []}
-    )
+    imgPair = {"img1_idx": img1_dict["idx"],
+               "img2_idx": img2_dict["idx"],
+               "matches": [],
+               "inliers": [],
+               "point_cloud": []
+    }
 
     return imgPair
 
-def generate_point_cloud(img_pair, P, Q, inliers_idx=None, plot=False):
+def create_frame_pair_from_img_dicts(img1_dict, img2_dict):
+    """ generate dict representing image pair
+
+    Args:
+        img1_dict (dict): {"idx": idx, "img": img, "kpts":kpts, "desc": desc}
+        img2_dict (dict): {"idx": idx, "img": img, "kpts":kpts, "desc": desc}
+    
+     Returns:
+        imgPair (dict): {"img1_idx": img1_dict["idx"],
+                        "img2_idx": img2_dict["idx"],
+                        "matches": match results
+                        "inliers": inds to inliers
+                        }
+    """
+
+    imgPair = {"img1_idx": img1_dict["idx"],
+               "img2_idx": img2_dict["idx"],
+               "matches": [],
+               "inliers": [],
+               "inliers_frame0": [],
+               "inliers_frame1": [],
+ 
+    }
+
+    return imgPair
+
+def generate_point_cloud(img_pair, left_img, right_img, P, Q, plot=False):
     """generate point cloud from a single image pair (left and right cameras)
 
     Args:
@@ -252,20 +271,16 @@ def generate_point_cloud(img_pair, P, Q, inliers_idx=None, plot=False):
         P (ndarray): camera matrix left cam
         Q ([type]): camera matrix right cam
         plot (bool, optional): plot point cloud. Defaults to False.
+        inliers_idx(int list, optional): if given, only kpts at these match indices are considered
 
     Returns:
         point_cloud (3 X N array): point in cartesian coordinates
     """
     # traingulating points:
     point_cloud = []
-    if inliers_idx is None:
-        kpts1kpts2 = np.array([img_pair["kpts1"][match.queryIdx].pt + img_pair["kpts2"][match.trainIdx].pt for match in img_pair["inliers"]])
-    else:
-        kpts1kpts2 = np.array([img_pair["kpts1"][match.queryIdx].pt + img_pair["kpts2"][match.trainIdx].pt for idx, match in enumerate(img_pair["inliers"]) if idx in inliers_idx])
-    
+    kpts1kpts2 = np.array([left_img["kpts"][img_pair["matches"][ind].queryIdx].pt + right_img["kpts"][img_pair["matches"][ind].trainIdx].pt for ind in img_pair["inliers"]])
     kpts1 = kpts1kpts2[..., :2].transpose()
     kpts2 = kpts1kpts2[..., 2:].transpose()
-
     x4D = cv2.triangulatePoints(P, Q, kpts1, kpts2)
 
     point_cloud = x4D[:3, :] / x4D[3, :]
@@ -278,59 +293,65 @@ def generate_point_cloud(img_pair, P, Q, inliers_idx=None, plot=False):
         ax.set_ylabel('Y [m]')
         ax.set_zlabel('Z [m]')
     
-    return point_cloud
+    img_pair["point_cloud"] = point_cloud
+    return img_pair
 
-def get_consistent_matches_between_frames(frame_seq, img_pair):
+def is_inlier(kpt, img_pair, kpType):
+    """checks if key point is a match inlier
+
+    Args:
+        kpt (int): key point Idx
+        img_pair (dict): matches between img pairs
+        kpType (string): "qeuryIdx" or "trainIdx
+    """
+    queryIdx = [match.queryIdx for match in img_pair["matches"]]
+    trainIdx = [match.trainIdx for match in img_pair["matches"]]
+    if kpType == "queryIdx" :
+        if kpt in queryIdx:
+            return queryIdx.index(kpt)
+        else:
+            return -1
+    else:
+        if kpt in trainIdx:
+            return trainIdx.index(kpt)
+        else:
+            return -1
+
+
+def get_consistent_matches_between_frames(left_cam_frame_pair, img_pairs, left_imgs, right_imgs):#, left_cam_frame_pair, img_pair):
     """
     clean outliers, by removing key points matches between two frames taken from same camera, 
     but don't have inliers between left and right cameras on same frame.
 
     Args:
-        frame_seq [dict]: matches between two frames of same camera
+        left_cam_frame_pair [dict]: matches between two frames of same camera
         img_pair [dict]: matches between same frame, taken from two cameras
 
     Returns:
-        frame_seq: matches between two frames of left camera
+        left_cam_frame_pair: matches between two frames of left camera
         img_pair: matches with key points also matching on prev frame
     """
-
-    frame_seq_queryIdx = [match.queryIdx for match in frame_seq["inliers"]]
-    frame_seq_trainIdx = [match.trainIdx for match in frame_seq["inliers"]]
-
-    img_pair2_queryIdx  = [match.queryIdx for match in img_pair[frame_seq["img2_idx"]]["inliers"]]
-
-    inliers_frame1 = []
-    inliers_frame2 = []
-    inliers_between_frames = []
-    for img_pair1_match_idx, img_pair1_match in enumerate(img_pair[frame_seq["img1_idx"]]["inliers"]):
-        # does kpts1 in this image pair also exists in match between frames?
-        try:
-            match_between_frames_idx = frame_seq_queryIdx.index(img_pair1_match.queryIdx)
-        except Exception: 
-            img_pair[frame_seq["img1_idx"]]["outliers"].append(img_pair1_match)
-            continue
-
-        fram0_img1_kpt = img_pair1_match.queryIdx
-        # what is kpt index on the ?
-        try:
-            img_pair2_inlier_idx = img_pair2_queryIdx.index(frame_seq["inliers"][match_between_frames_idx].trainIdx)
+    frame0 = left_cam_frame_pair["img1_idx"]
+    frame1 = left_cam_frame_pair["img2_idx"]
+    frame_matches = left_cam_frame_pair["matches"]
+    counter = 0
+    while counter < len(left_cam_frame_pair["inliers"]):
+        # if object is not a kpt in img oair of current and next frames, remove it
+        inlier = left_cam_frame_pair["inliers"][counter]
+        inlier_frame0 = is_inlier(left_cam_frame_pair["matches"][inlier].queryIdx, img_pairs[frame0], "queryIdx")
+        inlier_frame1 = is_inlier(left_cam_frame_pair["matches"][inlier].trainIdx, img_pairs[frame1], "queryIdx")
+        # an inlier must also have match left0 with right0 and left1 with right1.
+        if inlier_frame0 >= 0 and inlier_frame1 >= 0:
+            left_cam_frame_pair["inliers_frame0"].append(inlier_frame0)
+            left_cam_frame_pair["inliers_frame1"].append(inlier_frame1)
+            counter += 1
+        else:
+            left_cam_frame_pair["inliers"].pop(counter)
         
-        except Exception: 
-            continue
-        
-        inliers_frame1.append(img_pair[frame_seq["img1_idx"]]["inliers"][img_pair1_match_idx])
-        inliers_frame2.append(img_pair[frame_seq["img2_idx"]]["inliers"][img_pair2_inlier_idx])
-        inliers_between_frames.append(frame_seq["inliers"][match_between_frames_idx])
-                
-    img_pair[frame_seq["img1_idx"]]["inliers"] = inliers_frame1
-    img_pair[frame_seq["img2_idx"]]["inliers"] = inliers_frame2
-    frame_seq["inliers"] = inliers_between_frames
-
-    logging.info("inliers frame {}: {}; inliers frame {}: {}".format(frame_seq["img1_idx"], len(img_pair[frame_seq["img1_idx"]]["inliers"]),
-                                                                 frame_seq["img2_idx"], len(img_pair[frame_seq["img2_idx"]]["inliers"])))
-
+    logging.info("inliers between frame {} and frame {}: {}".format(left_cam_frame_pair["img1_idx"], left_cam_frame_pair["img2_idx"], \
+                                                                 len(left_cam_frame_pair["inliers"])))
  
-    return frame_seq, img_pair
+    return left_cam_frame_pair
 
 if __name__ == "__main__":
     datapath = "/workspaces/SLAMcourse/VAN_ex/data/dataset05/sequences/05/"
