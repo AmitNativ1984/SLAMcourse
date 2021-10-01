@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "cwd": "${fileDirname}",
+            "cwd": "${workspaceFolder}/VAN_ex/code",
             "env": {"PYTHONPATH": "/workspaces/SLAMcourse/VAN_ex/code"}
         },
         {
@@ -28,7 +28,7 @@
             "request": "launch",
             "program": "/workspaces/SLAMcourse/VAN_ex/code/ex_2/main.py",
             "console": "integratedTerminal",
-            "cwd": "${fileDirname}",
+            "cwd": "${workspaceFolder}/VAN_ex/code",
             "env": {"PYTHONPATH": "/workspaces/SLAMcourse/VAN_ex/code"}
         },
     ]
