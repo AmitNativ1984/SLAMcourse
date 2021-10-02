@@ -278,7 +278,7 @@ def generate_point_cloud(img_pair, left_img, right_img, P, Q, plot=False):
     """
     # traingulating points:
     point_cloud = []
-    kpts1kpts2 = np.array([left_img["kpts"][img_pair["matches"][ind].queryIdx].pt + right_img["kpts"][img_pair["matches"][ind].trainIdx].pt for ind in img_pair["inliers"]])
+    kpts1kpts2 = np.array([left_img["kpts"][match.queryIdx].pt + right_img["kpts"][match.trainIdx].pt for match in img_pair["matches"]])
     kpts1 = kpts1kpts2[..., :2].transpose()
     kpts2 = kpts1kpts2[..., 2:].transpose()
     x4D = cv2.triangulatePoints(P, Q, kpts1, kpts2)
@@ -352,6 +352,13 @@ def get_consistent_matches_between_frames(left_cam_frame_pair, img_pairs, left_i
                                                                  len(left_cam_frame_pair["inliers"])))
  
     return left_cam_frame_pair
+
+def get_match_inliers_kpts(img_dict, matches, inliers, kpt_type="queryIdx"):
+    if kpt_type=="queryIdx":
+        return [img_dict["kpts"][match.queryIdx].pt for match in np.array(matches)[inliers]]
+    elif kpt_type=="trainIdx":
+        return [img_dict["kpts"][match.trainIdx].pt for match in np.array(matches)[inliers]]
+
 
 if __name__ == "__main__":
     datapath = "/workspaces/SLAMcourse/VAN_ex/data/dataset05/sequences/05/"

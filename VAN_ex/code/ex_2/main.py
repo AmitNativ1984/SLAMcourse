@@ -82,29 +82,31 @@ if __name__ == "__main__":
     # building point cloud only from key points that are matched on all four images (2 image pairs from frame0 and frame1)
     success = False
     while not success:
-        match_between_frames_idx = random.sample(range(len(left_cam_pairs[idx]["inliers"])), 4)
+        inds = np.array(random.sample(range(len(left_cam_pairs[idx]["inliers"])), 4))
+        inliers = np.array(left_cam_pairs[idx]["inliers"])[inds]
+        img_pair_frame0 = img_pairs[left_cam_pairs[idx]["img1_idx"]]
+        img_pair_frame1 = img_pairs[left_cam_pairs[idx]["img2_idx"]]
+        inliers_frame0 = np.array(left_cam_pairs[idx]["inliers_frame0"])[inds]
+        inliers_frame1 = np.array(left_cam_pairs[idx]["inliers_frame1"])[inds]
+    
+        # object world points as point cloud of frame 0
+        world_points = img_pair_frame0["point_cloud"][..., inliers_frame0]
+        image_points = get_match_inliers_kpts(img_dict=left_imgs[img_pair_frame1["img1_idx"]],
+                                              matches=img_pair_frame1["matches"], 
+                                              inliers=inliers_frame1, 
+                                              kpt_type="queryIdx")
         
-        left0_kpt_ind = []
-        left1_kpt_ind = []
-        for match_idx in match_between_frames_idx:
-            left0_kpt_ind.append(is_inlier(left_cam_pairs[idx]["inliers"][match_idx].queryIdx, img_pairs[idx], "queryIdx")[1])
-            left1_kpt_ind.append(is_inlier(left_cam_pairs[idx]["inliers"][match_idx].trainIdx, img_pairs[idx+1], "queryIdx")[1])
-        
-            frame0
-
-
         logging.info("3D world coordinates from frame 0:")
         logging.info(world_points)
         logging.info("using frame0 points to as TRUE 3D position for PnP calculation on frame 1")
-        
-        image_points = np.array([img_pairs[1]["kpts1"][ind].pt for ind in points_idx])
+
 
         # calculate PnP:
         success, R1, t1 = cv2.solvePnP(objectPoints=world_points.transpose(), 
-                            imagePoints=image_points,
-                            cameraMatrix=P[:,:3], 
-                            distCoeffs=np.zeros((4,1)),
-                            flags=cv2.SOLVEPNP_P3P
+                                        imagePoints=np.array(image_points),
+                                        cameraMatrix=P[:,:3], 
+                                        distCoeffs=np.zeros((4,1)),
+                                        flags=cv2.SOLVEPNP_P3P
         )
         try:
             R1, jacobian = cv2.Rodrigues(R1)
