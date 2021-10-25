@@ -1,5 +1,6 @@
 from operator import truediv
 import numpy as np
+import random
 import cv2
 import matplotlib.pyplot as plt
 import logging
@@ -14,23 +15,43 @@ def read_images(idx, DATA_PATH):
     img2 = cv2.imread(img2str, 0)
     return img1, img2, img1str, img2str
 
-def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]"):
-    img1bgr = np.dstack((img1, img1, img1))
-    img2bgr = np.dstack((img2, img2, img2))
-    cv2.drawKeypoints(img1bgr, kpts1, img1bgr, color=(255,0,0))
+def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]", plot=True):
+    if img1.shape[-1] != 3:
+        img1bgr = np.dstack((img1, img1, img1))
+    else:
+        img1bgr = img1
+
+    if img2.shape[-1] != 3:
+        img2bgr = np.dstack((img2, img2, img2))
+    else:
+        img2bgr = img2
+
+    cv2.drawKeypoints(img1bgr, kpts1, img1bgr, color=(0,0,255))
     cv2.drawKeypoints(img2bgr, kpts2, img2bgr, color=(0,0,255))
-    cv2.imshow(title, np.hstack((img1bgr, img2bgr)))
-    cv2.waitKey(1)
+    img_stacked = np.hstack((img1bgr, img2bgr))
+    if plot:
+        cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
+        cv2.imshow(title, img_stacked)
+        # cv2.resizeWindow(title, 2200, 2200)
+        cv2.waitKey(1)
+
+    return img_stacked
     
-def draw_img_pair_kpts(img_pair, left_img, right_img, title=""):
+def draw_img_pair_kpts(img_pair, left_img, right_img, title="", inliers=None):
+   
     matches = np.array(img_pair["matches"])[img_pair["inliers"]]
+    if inliers is not None:
+        matches = matches[inliers]
+
     matches_img = cv2.drawMatches(cv2.imread(left_img["img_path"]), left_img["kpts"],
-                                  cv2.imread(left_img["img_path"]), right_img["kpts"],
-                                  matches,
-                                  None
+                                  cv2.imread(right_img["img_path"]), right_img["kpts"],
+                                  matches[:4],
+                                  cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
                                   )
                                   
+    cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
     cv2.imshow(title.format(img_pair["img1_idx"], img_pair["img2_idx"]), matches_img)
+    # cv2.resizeWindow(title, 2600, 2600)
     cv2.waitKey(1)
     pass
 
@@ -61,6 +82,7 @@ def read_images_and_detect_keyPts(idx, DATA_PATH, plot=False):
 
     if plot:
         draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right][{}]".format(idx))
+        
         cv2.waitKey(1)
 
     return img1_dict, img2_dict
@@ -143,7 +165,7 @@ def get_rectified_inliers_outliers(kpts1, kpts2, matches, thres):
 
     return match_inliers, match_outliers
     
-def match_images(img_pair, left_img, right_img, matcher="bf", cumsumThres = 0.88, plot=False):
+def match_images(img_pair, left_img, right_img, matcher="bf", cumsumThres = 0.88, plot=False, title=""):
     """[summary]
 
     Args:
@@ -159,12 +181,12 @@ def match_images(img_pair, left_img, right_img, matcher="bf", cumsumThres = 0.88
     
     matches = sorted(matches, key = lambda x:x.distance)
 
-    if plot:
-        # display first 20 points
-        imgMatches = cv2.drawMatches(cv2.imread(left_img["img_path"]),left_img["kpts"],right_img["img_path"],right_img["kpts"],matches[:20],None)
-        plt.figure(name="Matches")
-        plt.imshow(imgMatches)
-    
+    # if plot:
+    #     # display first 20 points
+    #     imgMatches = cv2.drawMatches(cv2.imread(left_img["img_path"]),left_img["kpts"],cv2.imread(right_img["img_path"]),right_img["kpts"],matches[:20],None)
+    #     plt.figure(name="Matches")
+    #     plt.imshow(imgMatches)
+
     # rejecting matches based on matcher distance (taking 88% of matches)
     match_dist = []
     for m in matches:
@@ -182,9 +204,17 @@ def match_images(img_pair, left_img, right_img, matcher="bf", cumsumThres = 0.88
     img_pair["inliers"] = matches_inliers       
     img_pair["outliers"] = matches_outliers
     img_pair["method"] = "features"
+    
+    if plot:
+        imgMatches = cv2.drawMatches(cv2.imread(left_img["img_path"]),left_img["kpts"],cv2.imread(right_img["img_path"]),right_img["kpts"],matches[:20],None)
+        cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
+        cv2.imshow(title, imgMatches)
+        cv2.resizeWindow(title, 2240, 1280)
+        cv2.waitKey(1)
+    
     return img_pair
 
-def match_rectified_images(img_pair, left_img, right_img, feature_matcher="bf", ver_px_diff=2, cumsumThres=0.88, plot=False):
+def match_rectified_images(img_pair, left_img, right_img, feature_matcher="bf", ver_px_diff=2, cumsumThres=0.88, plot=False, title=""):
     """ matching two rectified images
 
     Args:
@@ -193,7 +223,7 @@ def match_rectified_images(img_pair, left_img, right_img, feature_matcher="bf", 
         cumsumThres (float, optional): percent of sorted matches qualified as "good". Defaults to 0.88.
     """
 
-    img_pair = match_images(img_pair, left_img, right_img, matcher=feature_matcher, cumsumThres=cumsumThres)    # match images according to feature distance
+    img_pair = match_images(img_pair, left_img, right_img, matcher=feature_matcher, cumsumThres=cumsumThres, plot=plot, title=title + "bf_match")    # match images according to feature distance
     
     # rejecting outliers that exceed 2 pixels difference:
     inliers, outliers = get_rectified_inliers_outliers(left_img["kpts"], right_img["kpts"], img_pair["matches"], thres=ver_px_diff)
@@ -317,7 +347,6 @@ def is_inlier(kpt, img_pair, kpType):
         else:
             return -1
 
-
 def get_consistent_matches_between_frames(left_cam_frame_pair, img_pairs, left_imgs, right_imgs):#, left_cam_frame_pair, img_pair):
     """
     clean outliers, by removing key points matches between two frames taken from same camera, 
@@ -353,12 +382,219 @@ def get_consistent_matches_between_frames(left_cam_frame_pair, img_pairs, left_i
  
     return left_cam_frame_pair
 
-def get_match_inliers_kpts(img_dict, matches, inliers, kpt_type="queryIdx"):
+def get_inliers_px(img_dict, matches, inliers, kpt_type="queryIdx"):
     if kpt_type=="queryIdx":
         return [img_dict["kpts"][match.queryIdx].pt for match in np.array(matches)[inliers]]
     elif kpt_type=="trainIdx":
         return [img_dict["kpts"][match.trainIdx].pt for match in np.array(matches)[inliers]]
 
+def get_kpts_from_match_inliers(img_dict, matches, inliers, kpt_type="queryIdx"):
+    if kpt_type=="queryIdx":
+        return [img_dict["kpts"][match.queryIdx] for match in np.array(matches)[inliers]]
+    elif kpt_type=="trainIdx":
+        return [img_dict["kpts"][match.trainIdx] for match in np.array(matches)[inliers]]
+
+def px_dist_euclidian(px1, px2):
+    """calculate euclidian distantce between arrays of pixels
+
+    Args:
+        px1 (2XN numpy array): pixels in img1
+        px2 (2XN numpy array): pixels in img2
+    """
+    A = (px1 - px2)
+    return np.sqrt(np.sum(A**2, axis=0))
+
+def project_world_coord_to_image_pixels(P, X):
+    """project 3D world homegenous coordinate coordinate to image pixels 
+
+    Args:
+        P ([Mat]): [projection matrix]
+        X ([Mat]): [world coordinates]
+
+    Returns:
+        [Mat]: [pixelsv projected rto camera plane]
+    """
+    proj_hom = P @ X
+    proj_px = proj_hom[:2, :] / proj_hom[-1, :]
+
+    return proj_px
+
+def get_supporters(left1left2_pair, img_pairs, left_imgs, right_imgs, T, K, M1, M2, thres=2):
+    """Get all supporters of transform T (a projection transform of 3D point from camera A coordinate system to camera B)
+
+    Args:
+        left_cam_frame_pair (dict): pair of left0 and left1, including their inliers
+        img_pairs (dict): dict including inliers of each left-right pair
+        left_imgs (array[dict]): left images key points and desc
+        right_imgs (array[dict]): right images key points and desc
+        T (3x4 ndarray): projection transfrom from left0 to left1 coordinate system
+        K (3x4 ndarray): projection of camera intrinsic parameters
+        M (3x4 ndarray): translation from left to right camera
+        thres (int, optional): minimal pixel distance between projection of point and its original key point. Defaults to 2.
+    """
+    img_pair1 = img_pairs[left1left2_pair["img1_idx"]]
+    img_pair2 = img_pairs[left1left2_pair["img2_idx"]]
+
+    left1 = left_imgs[img_pair1["img1_idx"]]
+    right1 = right_imgs[img_pair1["img2_idx"]]
+
+    left2 = left_imgs[img_pair2["img1_idx"]]
+    right2 = right_imgs[img_pair2["img2_idx"]]
+
+    
+    # 3D point that is matched over the two image pairs:
+    X = img_pair1["point_cloud"]
+    X = X[:, left1left2_pair["inliers_frame0"]]
+    X = np.vstack((X, np.ones((1, X.shape[1]))))
+
+    # pixels at first img pair
+    px_left1 = get_inliers_px(left1, matches=img_pair1["matches"], inliers=left1left2_pair["inliers_frame0"], kpt_type="queryIdx")
+    px_right1 = get_inliers_px(right1, matches=img_pair1["matches"], inliers=left1left2_pair["inliers_frame0"], kpt_type="trainIdx")
+
+    # pixels at second img pair:
+    px_left2 = get_inliers_px(left1, matches=img_pair2["matches"], inliers=left1left2_pair["inliers_frame1"], kpt_type="queryIdx")
+    px_right2 = get_inliers_px(right1, matches=img_pair2["matches"], inliers=left1left2_pair["inliers_frame1"], kpt_type="trainIdx")
+
+    # transform all 3D world points to left2 coordinate system:
+    proj_px_left1 = project_world_coord_to_image_pixels(K @ M1, X)
+    proj_px_right1 = project_world_coord_to_image_pixels(K @ M2, X)
+    
+    I = np.array([0, 0, 0, 1])
+    T = np.vstack((T, I))
+    proj_px_left2 = project_world_coord_to_image_pixels(K @ M1 @ T, X)
+    proj_px_right2 = project_world_coord_to_image_pixels(K @ M2 @ T, X)
+        
+
+    # calculate distance between true pixels
+    dist_left1 = px_dist_euclidian(proj_px_left1, np.array(px_left1).T)
+    dist_right1 = px_dist_euclidian(proj_px_right1,  np.array(px_right1).T)
+    dist_left2 = px_dist_euclidian(proj_px_left2,  np.array(px_left2).T)
+    dist_right2 = px_dist_euclidian(proj_px_right2,  np.array(px_right2).T)
+
+    ind = (dist_left1 <= thres) & \
+          (dist_right1 <= thres) & \
+          (dist_left2 <= thres) & \
+          (dist_right2 <= thres)    
+
+    supporters = np.array(list(range(len(dist_left1))))[ind]
+
+    return supporters
+
+def pnp_ransac(left_cam_pair, img_pairs, left_imgs, right_imgs,  K, M1, M2, P, Q):
+    """
+    1. sample 4 points [V]
+    2. plot the 4 key points on all 4 images (red) [V]
+    3. perform pnp and get transform T [V]
+    4. project matching 3D points back to left0, right0, left1, right1, and plot pixels in red   
+    """
+
+    # sample points:
+    inds = np.array(random.sample(range(len(left_cam_pair["inliers"])), 4))
+    # inds = np.array(range(len(left_cam_pair["inliers"])))[:4]
+
+    inliers = np.array(left_cam_pair["inliers"])[inds]
+    img_pair_frame0 = img_pairs[left_cam_pair["img1_idx"]]
+    img_pair_frame1 = img_pairs[left_cam_pair["img2_idx"]]
+    inliers_frame0 = np.array(left_cam_pair["inliers_frame0"])[inds]
+    inliers_frame1 = np.array(left_cam_pair["inliers_frame1"])[inds]
+
+    # plot the 4 keypoints on all 4 images (left0/right0; left1/right1)
+    left0 = cv2.imread(left_imgs[left_cam_pair["img1_idx"]]["img_path"])
+    right0 = cv2.imread(right_imgs[left_cam_pair["img1_idx"]]["img_path"])
+    left1 = cv2.imread(left_imgs[left_cam_pair["img2_idx"]]["img_path"])
+    right1 = cv2.imread(right_imgs[left_cam_pair["img2_idx"]]["img_path"])
+    
+    left1kpts = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pair["img1_idx"]],
+                                        matches=img_pair_frame0["matches"],
+                                        inliers=inliers_frame0,
+                                        kpt_type="queryIdx")
+
+    right1kpts = get_kpts_from_match_inliers(img_dict=right_imgs[left_cam_pair["img1_idx"]],
+                                        matches=img_pair_frame0["matches"],
+                                        inliers=inliers_frame0,
+                                        kpt_type="trainIdx")
+
+    left2kpts = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pair["img2_idx"]],
+                                        matches=img_pair_frame1["matches"],
+                                        inliers=inliers_frame1,
+                                        kpt_type="queryIdx")
+
+    right2kpts = get_kpts_from_match_inliers(img_dict=right_imgs[left_cam_pair["img2_idx"]],
+                                        matches=img_pair_frame1["matches"],
+                                        inliers=inliers_frame1,
+                                        kpt_type="trainIdx")
+
+
+    ## calculate PnP:
+    world_points = img_pair_frame0["point_cloud"][..., inliers_frame0]
+    image_points = get_inliers_px(img_dict=left_imgs[img_pair_frame1["img1_idx"]],
+                                            matches=img_pair_frame1["matches"], 
+                                            inliers=inliers_frame1, 
+                                            kpt_type="queryIdx")
+    
+    logging.info("3D world coordinates from frame 0:")
+    logging.info(world_points)
+    logging.info("using frame0 points to as TRUE 3D position for PnP calculation on frame 1")
+
+
+    # calculate PnP:
+    success, R1, t1 = cv2.solvePnP(objectPoints=world_points.transpose(), 
+                                    imagePoints=np.array(image_points),
+                                    cameraMatrix=K[:,:3], 
+                                    distCoeffs=np.zeros((4,1)),
+                                    flags=cv2.SOLVEPNP_P3P
+    )
+   
+    assert success == True, logging.error("PnP failed")
+    
+    R1, jacobian = cv2.Rodrigues(R1)
+    logging.info("PnP succeeded")
+
+    ## calculate T transform:
+    T = []
+    T.append(np.hstack((R1, t1)))
+    
+    logging.info("frame left {} PnP solution: R={}".format(1, R1))
+    logging.info("frame left {} PnP solution: t={}".format(1, t1.transpose()))
+
+    ## Transform projected selected points back to image:
+    X = np.vstack((world_points, np.ones((1, world_points.shape[1]))))
+
+    # transform all 3D world points to left2 coordinate system:
+    proj_px_left0 = project_world_coord_to_image_pixels(K @ M1, X)
+    proj_px_right0 = project_world_coord_to_image_pixels(K @ M2, X)
+    
+    I = np.array([0, 0, 0, 1])
+    T1 = np.vstack((T[0], I))
+   
+    proj_px_left1 = project_world_coord_to_image_pixels(K @ M1 @ T1, X)
+    proj_px_right1 = project_world_coord_to_image_pixels(K @ M2 @ T1, X)
+
+    for px_left0, px_right0, px_left1, px_right1 in zip(proj_px_left0.T, proj_px_right0.T, proj_px_left1.T, proj_px_right1.T):
+        left0 = cv2.circle(left0, tuple(px_left0.astype(int)), radius=5, color=(255, 255, 0), thickness=1)
+        right0 = cv2.circle(right0, tuple(px_right0.astype(int)), radius=5, color=(255, 255, 0), thickness=1)
+        left1 = cv2.circle(left1, tuple(px_left1.astype(int)), radius=5, color=(255, 255, 0), thickness=1)
+        right1 = cv2.circle(right1, tuple(px_right1.astype(int)), radius=5, color=(255, 255, 0), thickness=1)
+
+    left0right0 = draw_kpts(img1 = left0, 
+                            img2 = right0,
+                            kpts1=left1kpts,
+                            kpts2=right1kpts,
+                            plot=False
+    )
+    left1right1 = draw_kpts(img1 = left1, 
+                            img2 = right1,
+                            kpts1=left2kpts,
+                            kpts2=right2kpts,
+                            plot=False
+    )
+    
+    left0right0_left1right1 = np.vstack((left0right0, left1right1))
+    title="point for pnp calc [top: frame0, bottom: frame1]"
+    cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
+    cv2.imshow(title, left0right0_left1right1)
+    cv2.waitKey(1)
+    cv2.waitKey(0)
 
 if __name__ == "__main__":
     datapath = "/workspaces/SLAMcourse/VAN_ex/data/dataset05/sequences/05/"

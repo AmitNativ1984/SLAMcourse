@@ -28,6 +28,10 @@ if __name__ == "__main__":
     """
     print("\n")
     logging.info("==== Answer [2.1]:=====")
+    """
+        Use the code from exercise 1 to create a point cloud for the next images pair (i.e. match
+        features, remove outliers and triangulate):
+    """
     point_cloud = []
     left_imgs = []
     right_imgs = []
@@ -37,8 +41,8 @@ if __name__ == "__main__":
         right_imgs.append(img2_dict)
         img_pairs.append(create_img_pair_from_img_dicts(left_imgs[idx], right_imgs[idx]))
         # match key points
-        img_pairs[idx] = match_rectified_images(img_pairs[idx], left_imgs[idx], right_imgs[idx], feature_matcher="bf", cumsumThres = 0.88, plot=False)
-        draw_img_pair_kpts(img_pairs[idx], left_imgs[idx], right_imgs[idx], title="img pair:[left {}, right {}]")
+        img_pairs[idx] = match_rectified_images(img_pairs[idx], left_imgs[idx], right_imgs[idx], feature_matcher="bf", cumsumThres = 0.88, plot=False, title="img pair:[left {}, right {}]".format(idx, idx))
+        draw_img_pair_kpts(img_pairs[idx], left_imgs[idx], right_imgs[idx], title="img pair:[left {}, right {}]".format(idx, idx))
 
         # get point cloud
         img_pairs[idx] = generate_point_cloud(img_pairs[idx], left_imgs[idx], right_imgs[idx], P, Q, plot=True)
@@ -48,12 +52,15 @@ if __name__ == "__main__":
     # match points in two left images
     print("\n")
     logging.info("===== Answer [2.2] =====")
+    """
+        Match features between the two left images
+    """
     left_cam_pairs = []
     for idx in range(0, 1):
         left_cam_pairs.append(create_frame_pair_from_img_dicts(left_imgs[idx], left_imgs[idx + 1])) 
         left_cam_pairs[idx] = match_images(left_cam_pairs[idx], left_imgs[idx], left_imgs[idx+1], matcher="bf", cumsumThres=0.88, plot=False)
         left_cam_pairs[idx] = get_consistent_matches_between_frames(left_cam_pairs[idx], img_pairs, left_imgs, right_imgs)
-        draw_img_pair_kpts(left_cam_pairs[idx], left_imgs[idx], left_imgs[idx+1], title="frame pair:[left {}, left {}]")
+        draw_img_pair_kpts(left_cam_pairs[idx], left_imgs[idx], left_imgs[idx+1], title="frame pair:[left {}, left {}]".format(idx, idx+1))
         logging.info("matched features in frame seq: left[{}], left[{}]".format(idx, idx+1))
     
     print("\n")
@@ -66,7 +73,7 @@ if __name__ == "__main__":
         (*) Camera A hase extrinsics [I|0]. T(A->B) = R1x + t1; the transofrmation of 3D points to camera B coordinates.
             T(B->C) = R2x + t2; the trasnformation from B to camera C coordinate system. What is T(A->C)?
             
-            1. T(A->C) = T(B->C)[T(A->B)] = R2(R1x + t1) + t2 = R2R1x + R2t1 + t1 = [R2R1 | (R2 + I)t1]
+            1. T(A->C) = T(B->C)[T(A->B)] = R2(R1x + t1) + t2 = R2R1x + R2t1 + t2 = [R2R1 | (R2t1 + t2)]
         
         (*) For a camera with extrinsic matrix [R|t], what is the location of the camera in the global
             coordinate system?
@@ -91,7 +98,7 @@ if __name__ == "__main__":
     
         # object world points as point cloud of frame 0
         world_points = img_pair_frame0["point_cloud"][..., inliers_frame0]
-        image_points = get_match_inliers_kpts(img_dict=left_imgs[img_pair_frame1["img1_idx"]],
+        image_points = get_inliers_px(img_dict=left_imgs[img_pair_frame1["img1_idx"]],
                                               matches=img_pair_frame1["matches"], 
                                               inliers=inliers_frame1, 
                                               kpt_type="queryIdx")
@@ -104,7 +111,7 @@ if __name__ == "__main__":
         # calculate PnP:
         success, R1, t1 = cv2.solvePnP(objectPoints=world_points.transpose(), 
                                         imagePoints=np.array(image_points),
-                                        cameraMatrix=P[:,:3], 
+                                        cameraMatrix=M1[:,:3], 
                                         distCoeffs=np.zeros((4,1)),
                                         flags=cv2.SOLVEPNP_P3P
         )
@@ -119,14 +126,17 @@ if __name__ == "__main__":
 
 
 
-    # Xc = RXw + T = [R | T]
-    # To find camera position, we have to find Xw such that Xc = 0
-    # Xw = inv(R)Xc - inv(R)T = [inv(R) | -inv(R)T]
+    # Xc = RXw + t = [R | t]
+    # to find camera position, we have to find Xw such that Xc = 0
+    # Xw = inv(R)Xc - inv(R)t = [inv(R) | -inv(R)t]
     # Because R is unitary: inv(R) = R':
-    # Xw = R'Xc - R'T = [R' | -R'T]
+    # Xw = R'Xc - R't = [R' | -R't]
+    
+    T = []
+    T.append(np.hstack((R1, -R1 @ t1)))
 
     logging.info("frame left {} PnP solution: R={}".format(1, R1))
-    logging.info("frame left {} PnP solution: T={}".format(1, t1.transpose()))
+    logging.info("frame left {} PnP solution: t={}".format(1, t1.transpose()))
 
     camPos_left = []
     camRot_left = []
@@ -140,7 +150,7 @@ if __name__ == "__main__":
     camPos_left.append(-R1.transpose() @ t1)
     camRot_left.append(R1.transpose())
     # get camera rotation:
-    yaw_pitch_roll.append(cv2.decomposeProjectionMatrix(projMatrix=np.hstack((camRot_left[0], camPos_left[0])), cameraMatrix=K)[6])
+    yaw_pitch_roll.append(cv2.decomposeProjectionMatrix(projMatrix=np.hstack((camRot_left[0], camPos_left[0])), cameraMatrix=K.copy())[6])
 
     fig = plt.figure()
     # ax = fig.add_subplot(projection='3d')
@@ -149,7 +159,7 @@ if __name__ == "__main__":
         # calculating position of right camera
         camPos_right.append(camPos_left[idx] - M2[:, -1].reshape(-1, 1))
         camRot_right.append(camRot_left[idx])
-        yaw_pitch_roll.append(cv2.decomposeProjectionMatrix(projMatrix=np.hstack((camRot_left[idx], camPos_left[idx])), cameraMatrix=K)[6])
+        yaw_pitch_roll.append(cv2.decomposeProjectionMatrix(projMatrix=np.hstack((camRot_left[idx], camPos_left[idx])), cameraMatrix=K.copy())[6])
         logging.info("frame {} LEFT:  cam Pos={}[m]; yaw={}[deg], pitch={}[deg], roll={}[deg]".format(idx, camPos_left[idx].transpose()[0], yaw_pitch_roll[idx][0], yaw_pitch_roll[0][1], yaw_pitch_roll[idx][2]))
         logging.info("frame {} RIGHT: cam Pos={}[m]; yaw={}[deg], pitch={}[deg], roll={}[deg]".format(idx, camPos_right[idx].transpose()[0], yaw_pitch_roll[idx][0], yaw_pitch_roll[idx][1], yaw_pitch_roll[idx][2]))
         plt.scatter(camPos_left[idx][0], camPos_left[idx][2], marker='o', alpha=0.5, facecolors="None", color='blue')
@@ -159,7 +169,18 @@ if __name__ == "__main__":
     ax.set_ylabel('Y [m]')
     # ax.set_zlabel('Z [m]')
 
-    #
-    
+    print("\n")
+    logging.info("===== Answer [2.4] =====")    
+    """Finding supporters of transform T. Here are the guidlines:
+        1. Get projection matrix for every frame, from the calculations above: Pleft0, Pright0, Pleft1, Pright1
+        2. For every 3D world that has matches on all 4 frames:
+            2.1 Find its pixels from key point location on each frame.
+            2.2 Project 3D world poistion to camera.
+            2.3 If projection is up to 2 pixels from key point position, this is a supporter
+    """
+    pnp_ransac(left_cam_pairs[0], img_pairs, left_imgs, right_imgs, K, M1, M2, P, Q)
+    get_supporters(left_cam_pairs[0], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=T[0], K=K, M1=M1, M2=M2, thres=5)
+
+
+    cv2.waitKey(0)
     plt.show()
-    cv2.waitKey(1)
