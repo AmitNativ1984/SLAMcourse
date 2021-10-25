@@ -188,11 +188,66 @@ if __name__ == "__main__":
         if not success:
             continue
 
-        supp = get_supporters(left_cam_pairs[0], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=5)
-        if len(supp) > num_supporters:
+        supp_inds = get_supporters(left_cam_pairs[0], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=5)
+        if len(supp_inds) > num_supporters:
             T = t
-            supporters = supp
-            num_supporters = len(supporters)
+            supporters_inds = supp_inds
+            num_supporters = len(supporters_inds)
+        break
+
+    left_cam_pairs[0]["pnp_supporters"] = supporters_inds
+    # plot matches on left0 and left1 in red in supporters and supporters in cyan:
+    
+    inliers_frame0 = np.array(left_cam_pairs[0]["inliers_frame0"])
+    inliers_frame1 = np.array(left_cam_pairs[0]["inliers_frame1"])
+    
+    
+    left0kpts = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pairs[0]["img1_idx"]],
+                                            matches=img_pairs[left_cam_pairs[0]["img1_idx"]]["matches"],
+                                            inliers=inliers_frame0,
+                                            kpt_type="queryIdx"
+    )
+    
+    left1kpts = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pairs[0]["img2_idx"]],
+                                            matches=img_pairs[left_cam_pairs[0]["img2_idx"]]["matches"],
+                                            inliers=inliers_frame1,
+                                            kpt_type="queryIdx")
+
+    left0supp = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pairs[0]["img1_idx"]],
+                                            matches=img_pairs[left_cam_pairs[0]["img1_idx"]]["matches"],
+                                            inliers=inliers_frame0[supporters_inds],
+                                            kpt_type="queryIdx"
+    )
+    
+    
+    left1supp = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pairs[0]["img2_idx"]],
+                                            matches=img_pairs[left_cam_pairs[0]["img2_idx"]]["matches"],
+                                            inliers=inliers_frame1[supporters_inds],
+                                            kpt_type="queryIdx")
+
+    
+    left0=cv2.imread(left_imgs[left_cam_pairs[0]["img1_idx"]]["img_path"])
+    left1=cv2.imread(left_imgs[left_cam_pairs[0]["img2_idx"]]["img_path"])
+    
+    _, left0, left1 = draw_kpts(left0, 
+                            left1,
+                            kpts1=left0kpts,
+                            kpts2=left1kpts,
+                            plot=False
+    )
+
+    left0left1, left0, left1 = draw_kpts(left0, 
+                                        left1,
+                                        kpts1=left0supp,
+                                        kpts2=left1supp,
+                                        plot=False,
+                                        color=(255, 255, 0)
+    )
+
+    title="ransac supporters step 0 [left0 | left1] = {}".format(len(supporters_inds))
+    cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
+    cv2.imshow(title, left0left1)
+
 
     cv2.waitKey(0)
     plt.show()

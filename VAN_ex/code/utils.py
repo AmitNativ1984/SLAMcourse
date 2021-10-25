@@ -15,7 +15,7 @@ def read_images(idx, DATA_PATH):
     img2 = cv2.imread(img2str, 0)
     return img1, img2, img1str, img2str
 
-def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]", plot=True):
+def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]", plot=True, color=(0, 0, 255)):
     if img1.shape[-1] != 3:
         img1bgr = np.dstack((img1, img1, img1))
     else:
@@ -26,8 +26,8 @@ def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]", plot=True):
     else:
         img2bgr = img2
 
-    cv2.drawKeypoints(img1bgr, kpts1, img1bgr, color=(0,0,255))
-    cv2.drawKeypoints(img2bgr, kpts2, img2bgr, color=(0,0,255))
+    cv2.drawKeypoints(img1bgr, kpts1, img1bgr, color=color)
+    cv2.drawKeypoints(img2bgr, kpts2, img2bgr, color=color)
     img_stacked = np.hstack((img1bgr, img2bgr))
     if plot:
         cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
@@ -35,7 +35,7 @@ def draw_kpts(img1, img2, kpts1, kpts2, title="kpts[left/right]", plot=True):
         # cv2.resizeWindow(title, 2200, 2200)
         cv2.waitKey(1)
 
-    return img_stacked
+    return img_stacked, img1bgr, img2bgr
     
 def draw_img_pair_kpts(img_pair, left_img, right_img, title="", inliers=None):
    
