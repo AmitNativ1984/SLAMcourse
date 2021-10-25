@@ -188,7 +188,7 @@ if __name__ == "__main__":
         if not success:
             continue
 
-        supp_inds = get_supporters(left_cam_pairs[0], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=5)
+        supp_inds = get_supporters(left_cam_pairs[0], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=2)
         if len(supp_inds) > num_supporters:
             T = t
             supporters_inds = supp_inds
@@ -249,5 +249,41 @@ if __name__ == "__main__":
     cv2.imshow(title, left0left1)
 
 
+    logging.info("===== Answer [2.5] =====")
+    """
+        Use a RANSAC framework, with PNP as the inner model, to find the 4 points that maximize
+        the number of supporters. We call this maximal group the ‘inliers’.
+        Note: Implement RANSAC yourself, do not use ‘cv2.solvePnPRansac’
+        Refine the resulting transformation by calculating transformation T for all the inliers.
+    """
+    
+    ransac_pnp = RANSAC_PNP(K=K,
+                            M1=M1,
+                            M2=M2
+    )
+    
+    left_cam_pairs = ransac_pnp.initial_supporters(left_cam_pairs, 
+                                                    img_pairs, 
+                                                    left_imgs, 
+                                                    right_imgs, 
+                                                    K, 
+                                                    M1, 
+                                                    M2, 
+                                                    pair=0, 
+                                                    num_points=4, 
+                                                    thres=2
+    )
+
+    left_cam_pairs, T = ransac_pnp.refinement_stage(left_cam_pairs, 
+                                                    img_pairs, 
+                                                    left_imgs, 
+                                                    right_imgs, 
+                                                    K, 
+                                                    M1, 
+                                                    M2, 
+                                                    pair=0, 
+                                                    num_points=4, 
+                                                    thres=2
+    )
     cv2.waitKey(0)
     plt.show()

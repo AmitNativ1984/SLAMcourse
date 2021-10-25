@@ -483,7 +483,7 @@ def get_supporters(left_cam_pair, img_pairs, left_imgs, right_imgs, T, K, M1, M2
 
     return supporters
 
-def pnp_transform(left_cam_pair, img_pairs, left_imgs, K, inliers_inds):
+def pnp_transform(left_cam_pair, img_pairs, left_imgs, K, inliers_inds, flag=cv2.SOLVEPNP_P3P):
     """
     1. sample 4 points [V]
     2. plot the 4 key points on all 4 images (red) [V]
@@ -513,7 +513,7 @@ def pnp_transform(left_cam_pair, img_pairs, left_imgs, K, inliers_inds):
                                    imagePoints=np.array(image_points),
                                    cameraMatrix=K[:,:3], 
                                    distCoeffs=np.zeros((4,1)),
-                                   flags=cv2.SOLVEPNP_P3P
+                                   flags=flag
     )
    
     if success == False:
@@ -592,6 +592,75 @@ def pnp_transform(left_cam_pair, img_pairs, left_imgs, K, inliers_inds):
     # cv2.waitKey(1)
     # cv2.waitKey(0)
 
+class RANSAC_PNP(object):
+    def __init__(self, K, M1, M2):
+        # self.left_cam_pair = left_cam_pair
+        # self.img_pairs = img_pairs
+        # self.left_imgs = left_imgs
+        # self.right_imgs = right_imgs
+        self.K = K
+        self.M1 = M1
+        self.M2 = M2       
+        
+        logging.info("RANSAC_PNP instance created")
+
+    @staticmethod
+    def initial_supporters(left_cam_pairs, img_pairs, left_imgs, right_imgs, K, M1, M2, pair=0, num_points=4, thres=2):
+        inds = np.array(range(len(left_cam_pairs[pair]["inliers"])))
+        num_supporters = 0
+        while len(inds) > num_points:
+            np.random.shuffle(inds)
+            inliers_inds = inds[:num_points]
+            inds = inds[num_points:]
+            success, t = pnp_transform(left_cam_pairs[pair], img_pairs, left_imgs,K, inliers_inds)
+            if not success:
+                continue
+
+            supp_inds = get_supporters(left_cam_pairs[pair], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=thres)
+            if len(supp_inds) > num_supporters:
+                T = t
+                supporters_inds = supp_inds
+                num_supporters = len(supporters_inds)
+            
+        # updating inliers according to pnp result
+        left_cam_pairs[pair]["inliers"] = np.array(left_cam_pairs[pair]["inliers"])[supporters_inds]
+        left_cam_pairs[pair]["inliers_frame0"] = np.array(left_cam_pairs[pair]["inliers_frame0"])[supporters_inds]
+        left_cam_pairs[pair]["inliers_frame1"] = np.array(left_cam_pairs[pair]["inliers_frame1"])[supporters_inds]
+        
+        return left_cam_pairs
+
+    @staticmethod
+    def refinement_stage(left_cam_pairs, img_pairs, left_imgs, right_imgs, K, M1, M2, pair=0, num_points=4, thres=2):
+        """apply refinement to pnp transform found, resulting from max supporters
+
+        Args:
+            left_cam_pairs ([type]): [description]
+            img_pairs ([type]): [description]
+            left_imgs ([type]): [description]
+            right_imgs ([type]): [description]
+            K ([type]): [description]
+            M1 ([type]): [description]
+            M2 ([type]): [description]
+            pair (int, optional): [description]. Defaults to 0.
+            num_points (int, optional): [description]. Defaults to 4.
+            thres (int, optional): [description]. Defaults to 2.
+        """
+        inliers_inds=np.array(range(len(left_cam_pairs[pair]["inliers"])))
+        num_supporters = len(inliers_inds)
+        success, T = pnp_transform(left_cam_pairs[pair], img_pairs, left_imgs, K, inliers_inds, flag=cv2.SOLVEPNP_ITERATIVE)
+
+        # if not success:
+        #     continue
+
+        supporters_inds = get_supporters(left_cam_pairs[pair], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=thres)
+            
+        # updating inliers according to pnp result
+        left_cam_pairs[pair]["inliers"] = np.array(left_cam_pairs[pair]["inliers"])[supporters_inds]
+        left_cam_pairs[pair]["inliers_frame0"] = np.array(left_cam_pairs[pair]["inliers_frame0"])[supporters_inds]
+        left_cam_pairs[pair]["inliers_frame1"] = np.array(left_cam_pairs[pair]["inliers_frame1"])[supporters_inds]
+
+        return left_cam_pairs, T
+        
 if __name__ == "__main__":
     datapath = "/workspaces/SLAMcourse/VAN_ex/data/dataset05/sequences/05/"
     k, m1, m2 = read_cameras(datapath)
