@@ -178,9 +178,21 @@ if __name__ == "__main__":
             2.2 Project 3D world poistion to camera.
             2.3 If projection is up to 2 pixels from key point position, this is a supporter
     """
-    pnp_ransac(left_cam_pairs[0], img_pairs, left_imgs, right_imgs, K, M1, M2, P, Q)
-    get_supporters(left_cam_pairs[0], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=T[0], K=K, M1=M1, M2=M2, thres=5)
+    inds = np.array(range(len(left_cam_pairs[0]["inliers"])))
+    num_supporters = 0
+    while len(inds) > 4:
+        np.random.shuffle(inds)
+        inliers_inds = inds[:4]
+        inds = inds[4:]
+        success, t = pnp_transform(left_cam_pairs[0], img_pairs, left_imgs, K, inliers_inds)
+        if not success:
+            continue
 
+        supp = get_supporters(left_cam_pairs[0], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=5)
+        if len(supp) > num_supporters:
+            T = t
+            supporters = supp
+            num_supporters = len(supporters)
 
     cv2.waitKey(0)
     plt.show()
