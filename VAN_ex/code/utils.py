@@ -652,7 +652,7 @@ class RANSAC_PNP(object):
         # if not success:
         #     continue
 
-        supporters_inds = get_supporters(left_cam_pairs[pair], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=t, K=K, M1=M1, M2=M2, thres=thres)
+        supporters_inds = get_supporters(left_cam_pairs[pair], img_pairs=img_pairs, left_imgs=left_imgs, right_imgs=right_imgs, T=T, K=K, M1=M1, M2=M2, thres=thres)
             
         # updating inliers according to pnp result
         left_cam_pairs[pair]["inliers"] = np.array(left_cam_pairs[pair]["inliers"])[supporters_inds]
@@ -660,7 +660,7 @@ class RANSAC_PNP(object):
         left_cam_pairs[pair]["inliers_frame1"] = np.array(left_cam_pairs[pair]["inliers_frame1"])[supporters_inds]
 
         return left_cam_pairs, T
-        
+
 if __name__ == "__main__":
     datapath = "/workspaces/SLAMcourse/VAN_ex/data/dataset05/sequences/05/"
     k, m1, m2 = read_cameras(datapath)

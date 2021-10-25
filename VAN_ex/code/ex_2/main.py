@@ -285,5 +285,46 @@ if __name__ == "__main__":
                                                     num_points=4, 
                                                     thres=2
     )
+      
+    inliers_frame0 = np.array(left_cam_pairs[0]["inliers_frame0"])
+    inliers_frame1 = np.array(left_cam_pairs[0]["inliers_frame1"])
+    
+    left0in = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pairs[0]["img1_idx"]],
+                                            matches=img_pairs[left_cam_pairs[0]["img1_idx"]]["matches"],
+                                            inliers=inliers_frame0,
+                                            kpt_type="queryIdx"
+    )
+    
+    left1in = get_kpts_from_match_inliers(img_dict=left_imgs[left_cam_pairs[0]["img2_idx"]],
+                                            matches=img_pairs[left_cam_pairs[0]["img2_idx"]]["matches"],
+                                            inliers=inliers_frame1,
+                                            kpt_type="queryIdx")
+
+    
+
+    
+    left0=cv2.imread(left_imgs[left_cam_pairs[0]["img1_idx"]]["img_path"])
+    left1=cv2.imread(left_imgs[left_cam_pairs[0]["img2_idx"]]["img_path"])
+    
+    _, left0, left1 = draw_kpts(left0, 
+                            left1,
+                            kpts1=left0kpts,
+                            kpts2=left1kpts,
+                            plot=False,
+                            color=(255, 255, 0)
+    )
+
+    left0left1, left0, left1 = draw_kpts(left0, 
+                                        left1,
+                                        kpts1=left0in,
+                                        kpts2=left1in,
+                                        plot=False,
+                                        color=(0, 0, 255)
+    )
+    title="ransac supporters refinement [left0 | left1] = {}".format(len(inliers_frame0))
+    cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
+    cv2.imshow(title, left0left1)
+
+    
     cv2.waitKey(0)
     plt.show()
