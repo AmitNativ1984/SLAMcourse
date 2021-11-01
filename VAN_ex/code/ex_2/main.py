@@ -45,7 +45,7 @@ if __name__ == "__main__":
         draw_img_pair_kpts(img_pairs[idx], left_imgs[idx], right_imgs[idx], title="img pair:[left {}, right {}]".format(idx, idx))
 
         # get point cloud
-        img_pairs[idx] = generate_point_cloud(img_pairs[idx], left_imgs[idx], right_imgs[idx], P, Q, plot=True)
+        img_pairs[idx] = generate_point_cloud(img_pairs[idx], left_imgs[idx], right_imgs[idx], P, Q, plot=False)
         logging.info("calculated 3D point cloud for image pair {}".format(idx))
 
     
@@ -321,10 +321,32 @@ if __name__ == "__main__":
                                         plot=False,
                                         color=(0, 0, 255)
     )
-    title="ransac supporters refinement [left0 | left1] = {}".format(len(inliers_frame0))
+    title="ransac supporters refinement [left0 | left1] = {} red: inliers; cyan: outliers".format(len(inliers_frame0))
     cv2.namedWindow(title, cv2.WINDOW_KEEPRATIO)
     cv2.imshow(title, left0left1)
+    
 
+    # plotting points clouds of frame 0 and frame1
+    point_cloud_frame0 = img_pairs[0]["point_cloud"][..., inliers_frame0]
+    point_cloud_frame1 = img_pairs[1]["point_cloud"][..., inliers_frame1]
+
+    # transform frame0 point cloud to frame1 coordinates:
+    point_cloud_frame0 = np.vstack((point_cloud_frame0, np.ones((1, point_cloud_frame0.shape[1]))))
+    transformed_cloud_frame0 = T @ point_cloud_frame0
+    transformed_cloud_frame0 = transformed_cloud_frame0[:3, :]
+    pclfig = plt.figure()
+    ax = pclfig.add_subplot()#(projection='3d')
+
+    point_cloud_frame1 = img_pairs[1]["point_cloud"][..., inliers_frame1]
+    ax.scatter(transformed_cloud_frame0[0, :], transformed_cloud_frame0[2, :], s=25**2, alpha=0.2, color='blue', label='cloud0 trans')
+    ax.scatter(point_cloud_frame1[0, :], point_cloud_frame1[2, :], s=25**2,alpha=0.2, color='red', marker="s", label='cloud1')
+
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Z [m]')
+    ax.legend()
+    ax.grid()
+    # ax.set_zlabel('Z [m]')
+    
     
     cv2.waitKey(0)
     plt.show()
